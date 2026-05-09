@@ -1,62 +1,69 @@
 import ListingCard from '../components/ListingCard';
 
+function getRecommendedListings(watches) {
+  return watches
+    .flatMap((watch) => {
+      const listings = [...(watch.listings || [])]
+        .sort((a, b) => Number(a.total_cost || 0) - Number(b.total_cost || 0))
+        .slice(0, 3);
+
+      return listings.map((listing) => ({
+        ...listing,
+        watchName: watch.name,
+        watchId: watch.id,
+        isTopRunner: watch.top_runner_listing_id === listing.id,
+      }));
+    })
+    .sort((a, b) => {
+      if (a.isTopRunner !== b.isTopRunner) {
+        return a.isTopRunner ? -1 : 1;
+      }
+      return Number(a.total_cost || 0) - Number(b.total_cost || 0);
+    });
+}
+
 export default function Dashboard({ watches }) {
-  const watchSections = watches
-    .map((watch) => ({
-      ...watch,
-      topListings: [...(watch.listings || [])].sort((a, b) => Number(a.total_cost || 0) - Number(b.total_cost || 0)).slice(0, 4),
-    }))
-    .filter((watch) => watch.topListings.length > 0);
+  const recommendedListings = getRecommendedListings(watches);
 
   if (!watches.length) {
     return (
       <section className="card empty-state">
         <div className="card-kicker">Dashboard</div>
         <h1>No watches yet</h1>
-        <p className="muted">Create your first watch and Scoutrr will start pulling listings into the dashboard.</p>
-        <a className="button button-primary" href="#watches">Create your first watch</a>
+        <p className="muted">Create your first watch to start pulling recommended listings.</p>
+      </section>
+    );
+  }
+
+  if (!recommendedListings.length) {
+    return (
+      <section className="card empty-state">
+        <div className="card-kicker">Dashboard</div>
+        <h1>No listings yet</h1>
+        <p className="muted">Refresh your watches to load listings.</p>
       </section>
     );
   }
 
   return (
-    <div className="page-grid">
-      <section className="hero card hero-card">
-        <div className="card-kicker">Recommended from active watches</div>
-        <h1>Best current hits</h1>
-        <p className="muted">Grouped by watch. Trimmed to the best few results instead of a giant wall.</p>
-      </section>
-
-      {watchSections.length ? watchSections.map((watch) => (
-        <section className="watch-section" key={watch.id}>
-          <div className="section-head">
-            <div>
-              <div className="card-kicker">{watch.broad ? 'Broad watch' : 'Watch'}</div>
-              <h2>{watch.name}</h2>
-            </div>
-            <a className="view-all-link" href="#watches">View all</a>
-          </div>
-          <div className="listing-grid">
-            {watch.topListings.map((listing) => (
-              <ListingCard
-                key={listing.id || listing.title}
-                listing={{
-                  ...listing,
-                  age: `${listing.listing_age_hours || 0}h old`,
-                  watchName: watch.name,
-                }}
-              />
-            ))}
-          </div>
-        </section>
-      )) : (
-        <section className="card empty-state">
+    <section className="page-grid">
+      <div className="section-head">
+        <div>
           <div className="card-kicker">Dashboard</div>
-          <h2>No listings yet</h2>
-          <p className="muted">Your watches exist, but none of them have listings loaded yet.</p>
-          <a className="button button-primary" href="#watches">Open watches</a>
-        </section>
-      )}
-    </div>
+          <h1>Recommended listings</h1>
+        </div>
+      </div>
+      <div className="listing-grid listing-grid-three">
+        {recommendedListings.map((listing) => (
+          <ListingCard
+            key={`${listing.watchId}-${listing.id}`}
+            listing={listing}
+            watchName={listing.watchName}
+            showWatchName
+            isTopRunner={listing.isTopRunner}
+          />
+        ))}
+      </div>
+    </section>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import Watches from './pages/Watches';
+import WatchDetail from './pages/WatchDetail';
 import Builds from './pages/Builds';
 import History from './pages/History';
 
@@ -95,8 +96,10 @@ export default function App() {
       }
 
       await loadData({ silent: true });
+      return createdWatch;
     } catch (submitError) {
       setError(submitError.message || 'Failed to create watch');
+      return null;
     } finally {
       setWatchFormBusy(false);
     }
@@ -222,8 +225,10 @@ export default function App() {
         throw new Error(`Delete failed with ${response.status}`);
       }
       await loadData({ silent: true });
+      return true;
     } catch (deleteError) {
       setError(deleteError.message || `Failed to delete watch ${watch.name}`);
+      return false;
     } finally {
       setDeletingWatchId('');
     }
@@ -298,15 +303,23 @@ export default function App() {
                 builds={builds}
                 onCreateWatch={handleCreateWatch}
                 onDeleteWatch={handleDeleteWatch}
+                deletingWatchId={deletingWatchId}
+                busy={watchFormBusy}
+              />
+            }
+          />
+          <Route
+            path="/watches/:watchId"
+            element={
+              <WatchDetail
+                watches={watches}
+                onDeleteWatch={handleDeleteWatch}
                 onRefreshWatch={handleRefreshWatch}
                 onChooseListing={handleChooseListing}
-                onUpdateWatch={handleUpdateWatch}
                 deletingWatchId={deletingWatchId}
                 refreshingWatchId={refreshingWatchId}
                 pinningWatchId={pinningWatchId}
-                updatingWatchId={updatingWatchId}
                 watchErrors={watchErrors}
-                busy={watchFormBusy}
               />
             }
           />
