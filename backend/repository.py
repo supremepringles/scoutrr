@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime
+import sqlite3
 from typing import Any
 from uuid import uuid4
 
 from backend.database import get_connection
+
+
+POLLING_OPTIONS = {15, 30, 60, 360, 720}
 
 
 def _new_id(prefix: str) -> str:
@@ -26,20 +31,31 @@ def _build_status(cost: float, budget: float, warning_threshold: float) -> str:
     return "healthy"
 
 
+def _normalize_polling_interval(value: Any) -> int:
+    if value in (None, "", "off", "Off", 0, "0"):
+        return 0
+    minutes = int(value)
+    if minutes not in POLLING_OPTIONS:
+        raise ValueError("Invalid polling interval")
+    return minutes
+
+
 class ScoutrrRepository:
     def list_watches(self) -> list[dict[str, Any]]:
         with get_connection() as connection:
             watch_rows = connection.execute(
                 """
                 SELECT id, name, query, broad, min_price, max_price, condition, build_id,
-                       top_runner_listing_id, veto_listing_id
+                       polling_interval_minutes, last_refreshed, top_runner_listing_id,
+                       veto_listing_id, created_at, updated_at
                 FROM watches
                 ORDER BY created_at DESC, name ASC
                 """
             ).fetchall()
             listing_rows = connection.execute(
                 """
-                SELECT id, watch_id, title, price, shipping, condition, source, listing_age_hours, url, is_active
+                SELECT id, watch_id, title, price, shipping, condition, source, listing_age_hours,
+                       url, image_url, is_active, is_pinned
                 FROM listings
                 WHERE is_active = 1
                 ORDER BY created_at DESC
@@ -51,22 +67,25 @@ class ScoutrrRepository:
             listing = dict(listing)
             listing["total_cost"] = _compute_listing_total(listing)
             listing["is_active"] = bool(listing["is_active"])
+            listing["is_pinned"] = bool(listing.get("is_pinned"))
             listings_by_watch[listing["watch_id"]].append(listing)
 
         payload = []
         for watch in watch_rows:
             watch = dict(watch)
             watch["broad"] = bool(watch["broad"])
-            listings = listings_by_watch.get(watch["id"], [])
-            effective_listing = next((item for item in listings if item["id"] == watch["veto_listing_id"]), None)
+            listings = sorted(listings_by_watch.get(watch["id"], []), key=lambda item: item["total_cost"])
+            effective_listing = next((item for item in listings if item.get("is_pinned")), None)
             if effective_listing is None:
                 effective_listing = min(listings, key=lambda item: item["total_cost"], default=None)
+            watch["top_runner_listing_id"] = effective_listing["id"] if effective_listing else None
+            watch["veto_listing_id"] = next((item["id"] for item in listings if item.get("is_pinned")), None)
             if effective_listing is not None:
-                watch["top_runner_listing_id"] = effective_listing["id"]
                 watch["top_runner"] = {
                     "id": effective_listing["id"],
                     "title": effective_listing["title"],
                     "total_cost": effective_listing["total_cost"],
+                    "image_url": effective_listing.get("image_url", ""),
                 }
             else:
                 watch["top_runner"] = None
@@ -74,13 +93,28 @@ class ScoutrrRepository:
             payload.append(watch)
         return payload
 
+    def list_pollable_watches(self) -> list[dict[str, Any]]:
+        with get_connection() as connection:
+            return connection.execute(
+                """
+                SELECT id, query, polling_interval_minutes, last_refreshed, created_at
+                FROM watches
+                WHERE polling_interval_minutes IS NOT NULL
+                ORDER BY created_at ASC
+                """
+            ).fetchall()
+
     def create_watch(self, payload: dict[str, Any]) -> dict[str, Any]:
         watch_id = payload.get("id") or _new_id("watch")
+        polling_interval_minutes = _normalize_polling_interval(payload.get("polling_interval_minutes", 60))
         with get_connection() as connection:
             connection.execute(
                 """
-                INSERT INTO watches (id, name, query, broad, min_price, max_price, condition, build_id, veto_listing_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO watches (
+                    id, name, query, broad, min_price, max_price, condition, build_id,
+                    polling_interval_minutes, veto_listing_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     watch_id,
@@ -91,10 +125,38 @@ class ScoutrrRepository:
                     payload.get("max_price"),
                     payload.get("condition"),
                     payload.get("build_id"),
+                    polling_interval_minutes,
                     payload.get("veto_listing_id"),
                 ),
             )
         return self.get_watch(watch_id)
+
+    def update_watch(self, watch_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        fields: list[str] = []
+        values: list[Any] = []
+
+        if "polling_interval_minutes" in payload:
+            fields.append("polling_interval_minutes = ?")
+            values.append(_normalize_polling_interval(payload.get("polling_interval_minutes")))
+
+        if not fields:
+            return self.get_watch(watch_id)
+
+        values.append(watch_id)
+        with get_connection() as connection:
+            cursor = connection.execute(
+                f"UPDATE watches SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                values,
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(watch_id)
+        return self.get_watch(watch_id)
+
+    def delete_watch(self, watch_id: str) -> None:
+        with get_connection() as connection:
+            cursor = connection.execute("DELETE FROM watches WHERE id = ?", (watch_id,))
+        if cursor.rowcount == 0:
+            raise KeyError(watch_id)
 
     def get_watch(self, watch_id: str) -> dict[str, Any]:
         items = [item for item in self.list_watches() if item["id"] == watch_id]
@@ -105,10 +167,16 @@ class ScoutrrRepository:
     def create_listing(self, watch_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         listing_id = payload.get("id") or _new_id("listing")
         with get_connection() as connection:
+            watch_exists = connection.execute("SELECT 1 FROM watches WHERE id = ?", (watch_id,)).fetchone()
+            if watch_exists is None:
+                raise KeyError(watch_id)
             connection.execute(
                 """
-                INSERT INTO listings (id, watch_id, title, price, shipping, condition, source, listing_age_hours, url, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO listings (
+                    id, watch_id, title, price, shipping, condition, source,
+                    listing_age_hours, url, image_url, is_active, is_pinned
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     watch_id = excluded.watch_id,
                     title = excluded.title,
@@ -118,7 +186,9 @@ class ScoutrrRepository:
                     source = excluded.source,
                     listing_age_hours = excluded.listing_age_hours,
                     url = excluded.url,
+                    image_url = excluded.image_url,
                     is_active = excluded.is_active,
+                    is_pinned = excluded.is_pinned,
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (
@@ -131,16 +201,89 @@ class ScoutrrRepository:
                     payload.get("source", "eBay"),
                     payload.get("listing_age_hours", 0),
                     payload.get("url", ""),
+                    payload.get("image_url", ""),
                     int(bool(payload.get("is_active", True))),
+                    int(bool(payload.get("is_pinned", False))),
                 ),
             )
         return self.get_listing(listing_id)
+
+    def replace_watch_listings(self, watch_id: str, listings: list[dict[str, Any]]) -> dict[str, Any]:
+        with get_connection() as connection:
+            watch_exists = connection.execute("SELECT veto_listing_id FROM watches WHERE id = ?", (watch_id,)).fetchone()
+            if watch_exists is None:
+                raise KeyError(watch_id)
+
+            pinned_listing_id = watch_exists.get("veto_listing_id")
+            connection.execute(
+                "UPDATE listings SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE watch_id = ?",
+                (watch_id,),
+            )
+
+            active_ids: set[str] = set()
+            for payload in listings:
+                listing_id = payload.get("id") or _new_id("listing")
+                active_ids.add(listing_id)
+                connection.execute(
+                    """
+                    INSERT INTO listings (
+                        id, watch_id, title, price, shipping, condition, source,
+                        listing_age_hours, url, image_url, is_active
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    ON CONFLICT(id) DO UPDATE SET
+                        watch_id = excluded.watch_id,
+                        title = excluded.title,
+                        price = excluded.price,
+                        shipping = excluded.shipping,
+                        condition = excluded.condition,
+                        source = excluded.source,
+                        listing_age_hours = excluded.listing_age_hours,
+                        url = excluded.url,
+                        image_url = excluded.image_url,
+                        is_active = 1,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (
+                        listing_id,
+                        watch_id,
+                        payload["title"],
+                        payload["price"],
+                        payload.get("shipping", 0),
+                        payload.get("condition"),
+                        payload.get("source", "eBay"),
+                        payload.get("listing_age_hours", 0),
+                        payload.get("url", ""),
+                        payload.get("image_url", ""),
+                    ),
+                )
+
+            connection.execute("UPDATE listings SET is_pinned = 0 WHERE watch_id = ?", (watch_id,))
+            if pinned_listing_id and pinned_listing_id in active_ids:
+                connection.execute(
+                    "UPDATE listings SET is_pinned = 1 WHERE id = ? AND watch_id = ?",
+                    (pinned_listing_id, watch_id),
+                )
+            else:
+                pinned_listing_id = None
+
+            connection.execute(
+                """
+                UPDATE watches
+                SET veto_listing_id = ?, last_refreshed = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (pinned_listing_id, watch_id),
+            )
+
+        return self.get_watch(watch_id)
 
     def get_listing(self, listing_id: str) -> dict[str, Any]:
         with get_connection() as connection:
             item = connection.execute(
                 """
-                SELECT id, watch_id, title, price, shipping, condition, source, listing_age_hours, url, is_active
+                SELECT id, watch_id, title, price, shipping, condition, source, listing_age_hours,
+                       url, image_url, is_active, is_pinned
                 FROM listings
                 WHERE id = ?
                 """,
@@ -151,10 +294,27 @@ class ScoutrrRepository:
         item = dict(item)
         item["total_cost"] = _compute_listing_total(item)
         item["is_active"] = bool(item["is_active"])
+        item["is_pinned"] = bool(item.get("is_pinned"))
         return item
 
     def set_watch_veto(self, watch_id: str, listing_id: str | None) -> dict[str, Any]:
         with get_connection() as connection:
+            watch_exists = connection.execute("SELECT 1 FROM watches WHERE id = ?", (watch_id,)).fetchone()
+            if watch_exists is None:
+                raise KeyError(watch_id)
+            if listing_id is not None:
+                listing = connection.execute(
+                    "SELECT 1 FROM listings WHERE id = ? AND watch_id = ? AND is_active = 1",
+                    (listing_id, watch_id),
+                ).fetchone()
+                if listing is None:
+                    raise sqlite3.IntegrityError("listing does not belong to watch")
+            connection.execute("UPDATE listings SET is_pinned = 0 WHERE watch_id = ?", (watch_id,))
+            if listing_id is not None:
+                connection.execute(
+                    "UPDATE listings SET is_pinned = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND watch_id = ?",
+                    (listing_id, watch_id),
+                )
             connection.execute(
                 "UPDATE watches SET veto_listing_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (listing_id, watch_id),
@@ -205,13 +365,34 @@ class ScoutrrRepository:
             raise KeyError(build_id)
         return items[0]
 
-    def list_sold_history(self, query: str | None = None, months: float | None = None) -> list[dict[str, Any]]:
-        sql = "SELECT id, query, title, sold_price, shipping, source, sold_at, listing_url, pinned FROM sold_history"
+    def delete_build(self, build_id: str) -> None:
+        with get_connection() as connection:
+            cursor = connection.execute("DELETE FROM builds WHERE id = ?", (build_id,))
+        if cursor.rowcount == 0:
+            raise KeyError(build_id)
+
+    def list_sold_history(
+        self,
+        query: str | None = None,
+        months: float | None = None,
+        platform: str | None = None,
+        condition: str | None = None,
+    ) -> list[dict[str, Any]]:
+        sql = (
+            "SELECT id, query, title, sold_price, shipping, source, platform, condition, notes, source_type, "
+            "sold_at, listing_url, pinned, created_at, updated_at FROM sold_history"
+        )
         clauses = []
         params: list[Any] = []
         if query:
-            clauses.append("query LIKE ?")
-            params.append(f"%{query}%")
+            clauses.append("(query LIKE ? OR title LIKE ?)")
+            params.extend([f"%{query}%", f"%{query}%"])
+        if platform:
+            clauses.append("platform = ?")
+            params.append(platform)
+        if condition:
+            clauses.append("condition = ?")
+            params.append(condition)
         if months is not None:
             clauses.append("datetime(sold_at) >= datetime('now', ?)")
             params.append(f"-{months * 30:.0f} days")
@@ -230,17 +411,25 @@ class ScoutrrRepository:
 
     def create_sold_history(self, payload: dict[str, Any]) -> dict[str, Any]:
         history_id = payload.get("id") or _new_id("sold")
+        sold_at = payload.get("sold_at") or datetime.utcnow().date().isoformat()
         with get_connection() as connection:
             connection.execute(
                 """
-                INSERT INTO sold_history (id, query, title, sold_price, shipping, source, sold_at, listing_url, pinned)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sold_history (
+                    id, query, title, sold_price, shipping, source, platform, condition,
+                    notes, source_type, sold_at, listing_url, pinned
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     query = excluded.query,
                     title = excluded.title,
                     sold_price = excluded.sold_price,
                     shipping = excluded.shipping,
                     source = excluded.source,
+                    platform = excluded.platform,
+                    condition = excluded.condition,
+                    notes = excluded.notes,
+                    source_type = excluded.source_type,
                     sold_at = excluded.sold_at,
                     listing_url = excluded.listing_url,
                     pinned = excluded.pinned,
@@ -248,12 +437,16 @@ class ScoutrrRepository:
                 """,
                 (
                     history_id,
-                    payload["query"],
+                    payload.get("query") or payload["title"],
                     payload["title"],
                     payload["sold_price"],
                     payload.get("shipping", 0),
-                    payload.get("source", "eBay"),
-                    payload["sold_at"],
+                    payload.get("source") or payload.get("platform", "Other"),
+                    payload.get("platform", "Other"),
+                    payload.get("condition"),
+                    payload.get("notes", ""),
+                    payload.get("source_type", "Manual"),
+                    sold_at,
                     payload.get("listing_url", ""),
                     int(bool(payload.get("pinned", False))),
                 ),
@@ -262,6 +455,12 @@ class ScoutrrRepository:
         if not items:
             raise KeyError(history_id)
         return items[0]
+
+    def delete_sold_history(self, history_id: str) -> None:
+        with get_connection() as connection:
+            cursor = connection.execute("DELETE FROM sold_history WHERE id = ?", (history_id,))
+        if cursor.rowcount == 0:
+            raise KeyError(history_id)
 
 
 repository = ScoutrrRepository()

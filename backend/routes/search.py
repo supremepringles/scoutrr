@@ -34,6 +34,7 @@ def search_listings(q: str = Query(..., min_length=2)):
                 "shipping": listing.shipping,
                 "condition": listing.condition,
                 "url": listing.url,
+                "image_url": listing.image_url,
                 "total_cost": listing.total_cost,
             }
             for listing in listings
@@ -51,9 +52,9 @@ def ingest_search_results(watch_id: str, q: str = Query(..., min_length=2)):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     try:
-        for listing in listings:
-            repository.create_listing(
-                watch_id,
+        return repository.replace_watch_listings(
+            watch_id,
+            [
                 {
                     "id": listing.id,
                     "title": listing.title,
@@ -63,8 +64,10 @@ def ingest_search_results(watch_id: str, q: str = Query(..., min_length=2)):
                     "source": listing.source,
                     "listing_age_hours": listing.listing_age_hours,
                     "url": listing.url,
-                },
-            )
-        return repository.get_watch(watch_id)
+                    "image_url": listing.image_url,
+                }
+                for listing in listings
+            ],
+        )
     except KeyError:
         raise HTTPException(status_code=404, detail="Watch not found") from None

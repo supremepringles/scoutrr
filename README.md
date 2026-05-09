@@ -145,7 +145,7 @@ Placeholder for now:
 - Discord alerts
 - Craigslist support
 - Better mobile UI
-- Smarter sold-comp ingestion
+- Mode B sold-listing pull once production eBay access is confirmed (see `docs/MODE_B_SOLD_PULL_FOLLOWUP.md`)
 - Import/export for watches and builds
 
 ## Contributing

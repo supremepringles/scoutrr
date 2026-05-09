@@ -14,7 +14,9 @@ class Listing:
     source: str = "eBay"
     listing_age_hours: int = 0
     url: str = ""
+    image_url: str = ""
     vetoed: bool = False
+    is_pinned: bool = False
 
     @property
     def total_cost(self) -> float:
@@ -32,6 +34,8 @@ class Watch:
     condition: Optional[str] = None
     top_runner_id: Optional[str] = None
     veto_listing_id: Optional[str] = None
+    polling_interval_minutes: Optional[int] = 60
+    last_refreshed: Optional[str] = None
     listings: List[Listing] = field(default_factory=list)
 
 

@@ -1,18 +1,33 @@
-export default function BuildCard({ build }) {
-  const budget = Number(build.budget || 0);
-  const cost = Number(build.cost || 0);
-  const warningThreshold = Number(build.warning_threshold ?? build.warningThreshold ?? 0.9);
-  const ratio = budget > 0 ? cost / budget : 0;
-  const statusClass = ratio >= 1 ? 'danger' : ratio >= warningThreshold ? 'warn' : 'ok';
+import BudgetBar from './BudgetBar';
 
+export default function BuildCard({ build, onDelete, deleting }) {
   return (
-    <div className="card">
-      <div className="card-kicker">Build</div>
-      <h3>{build.name}</h3>
-      <p>${cost.toFixed(2)} / ${budget.toFixed(2)}</p>
-      <div className="budget-bar">
-        <div className={`budget-fill ${statusClass}`} style={{ width: `${Math.min(ratio, 1) * 100}%` }} />
+    <div className="card build-card">
+      <div className="section-head compact-head">
+        <div>
+          <div className="card-kicker">Build</div>
+          <h3>{build.name}</h3>
+        </div>
+        <button className="button button-ghost button-danger" type="button" onClick={() => onDelete(build)} disabled={deleting}>
+          {deleting ? 'Deleting…' : 'Delete'}
+        </button>
       </div>
+      <div className="build-stats">
+        <div>
+          <span className="muted">Budget</span>
+          <strong>${Number(build.budget || 0).toFixed(2)}</strong>
+        </div>
+        <div>
+          <span className="muted">Current total</span>
+          <strong>${Number(build.cost || 0).toFixed(2)}</strong>
+        </div>
+      </div>
+      <BudgetBar
+        cost={build.cost}
+        budget={build.budget}
+        warningThreshold={build.warning_threshold ?? build.warningThreshold}
+      />
+      <div className="muted">{build.watch_count || 0} watched part groups</div>
     </div>
   );
 }

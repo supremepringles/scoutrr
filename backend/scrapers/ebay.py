@@ -60,6 +60,7 @@ class EbayClient:
                     shipping=shipping_value,
                     condition=item.get("condition", "Unknown"),
                     url=item.get("itemWebUrl", ""),
+                    image_url=_extract_image(item),
                     listing_age_hours=_listing_age_hours(item.get("itemCreationDate")),
                 )
             )
@@ -112,6 +113,17 @@ def _extract_shipping(item: dict) -> float:
         if cost.get("value") is not None:
             return _to_float(cost.get("value"))
     return 0.0
+
+
+def _extract_image(item: dict) -> str:
+    primary = (item.get("image") or {}).get("imageUrl")
+    if primary:
+        return str(primary)
+    for extra in item.get("additionalImages") or []:
+        image_url = extra.get("imageUrl")
+        if image_url:
+            return str(image_url)
+    return ""
 
 
 def _listing_age_hours(value: str | None) -> int:

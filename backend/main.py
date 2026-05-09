@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import socket
-from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
@@ -11,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import ROOT, settings
 from backend.database import init_db
 from backend.routes import alerts, builds, ebay, history, search, watches
+from backend.scheduler import WatchPoller
 
 LOG_PATH = ROOT / settings.log_file
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -20,6 +20,7 @@ logging.basicConfig(
     handlers=[logging.FileHandler(LOG_PATH), logging.StreamHandler()],
 )
 log = logging.getLogger("scoutrr")
+poller = WatchPoller()
 
 app = FastAPI(title="Scoutrr API", version="0.1.0")
 app.add_middleware(
@@ -40,14 +41,20 @@ app.include_router(ebay.router)
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+    poller.start()
+
+
+@app.on_event("shutdown")
+def shutdown() -> None:
+    poller.stop()
 
 
 @app.get("/")
 def root():
     return {
         "name": settings.app_name,
-        "theme": "always-dark",
-        "accent": "dark-orange",
+        "theme": "thinkcentre-dark",
+        "accent": "lenovo-red",
         "frontend_port": settings.frontend_port,
         "database_file": settings.database_file,
     }

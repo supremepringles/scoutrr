@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Dashboard from './pages/Dashboard';
 import Watches from './pages/Watches';
 import Builds from './pages/Builds';
@@ -14,6 +14,15 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [watchFormBusy, setWatchFormBusy] = useState(false);
+  const [buildFormBusy, setBuildFormBusy] = useState(false);
+  const [historyFormBusy, setHistoryFormBusy] = useState(false);
+  const [deletingWatchId, setDeletingWatchId] = useState('');
+  const [deletingBuildId, setDeletingBuildId] = useState('');
+  const [deletingHistoryId, setDeletingHistoryId] = useState('');
+  const [refreshingWatchId, setRefreshingWatchId] = useState('');
+  const [pinningWatchId, setPinningWatchId] = useState('');
+  const [updatingWatchId, setUpdatingWatchId] = useState('');
+  const [watchErrors, setWatchErrors] = useState({});
 
   async function loadData({ silent = false } = {}) {
     if (!silent) {
@@ -95,53 +104,233 @@ export default function App() {
     }
   }
 
-  const dashboardListings = useMemo(() => {
-    return watches
-      .filter((watch) => Array.isArray(watch.listings) && watch.listings.length > 0)
-      .flatMap((watch) =>
-        watch.listings.map((listing) => ({
-          id: listing.id,
-          title: listing.title,
-          condition: listing.condition || 'Unknown',
-          age: `${listing.listing_age_hours || 0}h old`,
-          total: Number(listing.total_cost || 0).toFixed(2),
-          url: listing.url,
-          watchName: watch.name,
-        }))
-      )
-      .sort((a, b) => Number(a.total) - Number(b.total))
-      .slice(0, 8);
-  }, [watches]);
+  async function handleCreateBuild(formData) {
+    setBuildFormBusy(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/builds`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      if (!response.ok) {
+        throw new Error(`Build creation failed with ${response.status}`);
+      }
+      await loadData({ silent: true });
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to create build');
+    } finally {
+      setBuildFormBusy(false);
+    }
+  }
+
+  async function handleCreateHistory(formData) {
+    setHistoryFormBusy(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      if (!response.ok) {
+        throw new Error(`History creation failed with ${response.status}`);
+      }
+      await loadData({ silent: true });
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to save sold comp');
+    } finally {
+      setHistoryFormBusy(false);
+    }
+  }
+
+  async function handleRefreshWatch(watch) {
+    setRefreshingWatchId(watch.id);
+    setWatchErrors((current) => ({ ...current, [watch.id]: '' }));
+    try {
+      const response = await fetch(
+        `${API_BASE}/search/watches/${watch.id}/ingest?q=${encodeURIComponent(watch.query)}`,
+        { method: 'POST' }
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || `Refresh failed with ${response.status}`);
+      }
+      await loadData({ silent: true });
+    } catch (refreshError) {
+      setWatchErrors((current) => ({
+        ...current,
+        [watch.id]: refreshError.message || `Failed to refresh ${watch.name}`,
+      }));
+    } finally {
+      setRefreshingWatchId('');
+    }
+  }
+
+  async function handleChooseListing(watch, listingId) {
+    setPinningWatchId(watch.id);
+    setWatchErrors((current) => ({ ...current, [watch.id]: '' }));
+    try {
+      const response = await fetch(`${API_BASE}/watches/${watch.id}/veto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listing_id: listingId }),
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || `Pin update failed with ${response.status}`);
+      }
+      await loadData({ silent: true });
+    } catch (pinError) {
+      setWatchErrors((current) => ({
+        ...current,
+        [watch.id]: pinError.message || `Failed to update ${watch.name}`,
+      }));
+    } finally {
+      setPinningWatchId('');
+    }
+  }
+
+  async function handleUpdateWatch(watch, pollingIntervalMinutes) {
+    setUpdatingWatchId(watch.id);
+    setWatchErrors((current) => ({ ...current, [watch.id]: '' }));
+    try {
+      const response = await fetch(`${API_BASE}/watches/${watch.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ polling_interval_minutes: pollingIntervalMinutes }),
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || `Watch update failed with ${response.status}`);
+      }
+      await loadData({ silent: true });
+    } catch (updateError) {
+      setWatchErrors((current) => ({
+        ...current,
+        [watch.id]: updateError.message || `Failed to update ${watch.name}`,
+      }));
+    } finally {
+      setUpdatingWatchId('');
+    }
+  }
+
+  async function handleDeleteWatch(watch) {
+    if (!window.confirm(`Delete watch ${watch.name}?`)) {
+      return;
+    }
+    setDeletingWatchId(watch.id);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/watches/${watch.id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error(`Delete failed with ${response.status}`);
+      }
+      await loadData({ silent: true });
+    } catch (deleteError) {
+      setError(deleteError.message || `Failed to delete watch ${watch.name}`);
+    } finally {
+      setDeletingWatchId('');
+    }
+  }
+
+  async function handleDeleteBuild(build) {
+    if (!window.confirm(`Delete build ${build.name}?`)) {
+      return;
+    }
+    setDeletingBuildId(build.id);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/builds/${build.id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error(`Delete failed with ${response.status}`);
+      }
+      await loadData({ silent: true });
+    } catch (deleteError) {
+      setError(deleteError.message || `Failed to delete build ${build.name}`);
+    } finally {
+      setDeletingBuildId('');
+    }
+  }
+
+  async function handleDeleteHistory(item) {
+    if (!window.confirm(`Delete history entry ${item.title}?`)) {
+      return;
+    }
+    setDeletingHistoryId(item.id);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/history/${item.id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error(`Delete failed with ${response.status}`);
+      }
+      await loadData({ silent: true });
+    } catch (deleteError) {
+      setError(deleteError.message || `Failed to delete history entry ${item.title}`);
+    } finally {
+      setDeletingHistoryId('');
+    }
+  }
 
   return (
     <div className="app-shell">
       <aside className="sidebar card">
-        <div>
-          <div className="card-kicker">{meta?.name || 'Scoutrr'}</div>
-          <h2>Secondhand tech deal finder</h2>
-          <p className="muted">Live backend: {API_BASE}</p>
+        <div className="sidebar-brand">
+          <a className="wordmark" href="#dashboard">Scoutrr</a>
+          <p className="muted">Used gear tracker</p>
         </div>
-        <nav>
+        <nav className="sidebar-nav">
           <a href="#dashboard">Dashboard</a>
           <a href="#watches">Watches</a>
           <a href="#builds">Builds</a>
-          <a href="#history">History</a>
+          <a href="#history">Sold history</a>
         </nav>
+        <div className="sidebar-meta muted">
+          <span>{meta?.theme || 'thinkcentre-dark'}</span>
+          <span>{API_BASE}</span>
+        </div>
       </aside>
       <main className="content">
         {error ? <section className="card error-card">{error}</section> : null}
         {loading ? <section className="card muted">Loading live Scoutrr data…</section> : null}
-        <section id="dashboard"><Dashboard watches={watches} builds={builds} listings={dashboardListings} /></section>
+        <section id="dashboard">
+          <Dashboard watches={watches} />
+        </section>
         <section id="watches">
           <Watches
             watches={watches}
             builds={builds}
             onCreateWatch={handleCreateWatch}
+            onDeleteWatch={handleDeleteWatch}
+            onRefreshWatch={handleRefreshWatch}
+            onChooseListing={handleChooseListing}
+            onUpdateWatch={handleUpdateWatch}
+            deletingWatchId={deletingWatchId}
+            refreshingWatchId={refreshingWatchId}
+            pinningWatchId={pinningWatchId}
+            updatingWatchId={updatingWatchId}
+            watchErrors={watchErrors}
             busy={watchFormBusy}
           />
         </section>
-        <section id="builds"><Builds builds={builds} /></section>
-        <section id="history"><History history={history} /></section>
+        <section id="builds">
+          <Builds
+            builds={builds}
+            onCreateBuild={handleCreateBuild}
+            onDeleteBuild={handleDeleteBuild}
+            deletingBuildId={deletingBuildId}
+            creatingBuild={buildFormBusy}
+          />
+        </section>
+        <section id="history">
+          <History
+            history={history}
+            onCreateHistory={handleCreateHistory}
+            onDeleteHistory={handleDeleteHistory}
+            deletingHistoryId={deletingHistoryId}
+            creatingHistory={historyFormBusy}
+          />
+        </section>
       </main>
     </div>
   );
