@@ -10,9 +10,9 @@ client = EbayClient()
 
 
 @router.get("")
-def search_listings(q: str = Query(..., min_length=2), category: str | None = Query(None), exclusions: str | None = Query(None)):
+def search_listings(q: str = Query(..., min_length=2), category: str | None = Query(None), exclusions: str | None = Query(None), condition: str | None = Query(None)):
     try:
-        listings = client.search(q, category=category, user_exclusions=exclusions)
+        listings = client.search(q, category=category, user_exclusions=exclusions, condition=condition)
     except EbayConfigError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except EbayApiError as exc:
@@ -50,6 +50,7 @@ def ingest_search_results(watch_id: str):
             watch["query"],
             category=watch.get("category"),
             user_exclusions=watch.get("user_exclusions"),
+            condition=watch.get("condition"),
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="Watch not found") from None

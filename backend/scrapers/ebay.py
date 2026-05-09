@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 from backend.config import settings
 from backend.models import Listing
-from backend.search_config import CATEGORY_EXCLUSIONS
+from backend.search_config import CATEGORY_EXCLUSIONS, CONDITION_ID_MAP
 
 log = logging.getLogger(__name__)
 
@@ -54,11 +54,15 @@ class EbayClient:
         final_query = " ".join([query.strip(), *[f'-{term}' for term in deduped]]).strip()
         return final_query
 
-    def search(self, query: str, category: str | None = None, user_exclusions: str | None = None) -> List[Listing]:
+    def search(self, query: str, category: str | None = None, user_exclusions: str | None = None, condition: str | None = None) -> List[Listing]:
         token = self._get_access_token()
         final_query = self.build_query(query, category=category, user_exclusions=user_exclusions)
-        log.info("Scoutrr eBay query: %s", final_query)
-        params = urlencode({"q": final_query, "limit": 25})
+        condition_id = CONDITION_ID_MAP.get(condition or "Any")
+        log.info("Scoutrr eBay query: %s | condition=%s", final_query, condition_id or "any")
+        params_dict = {"q": final_query, "limit": 25}
+        if condition_id:
+            params_dict["filter"] = f"conditionIds:{{{condition_id}}}"
+        params = urlencode(params_dict)
         request = Request(f"{self.SEARCH_URL}?{params}")
         request.add_header("Authorization", f"Bearer {token}")
         request.add_header("Accept", "application/json")

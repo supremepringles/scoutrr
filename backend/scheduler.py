@@ -58,6 +58,7 @@ class WatchPoller:
                     watch["query"],
                     category=watch.get("category"),
                     user_exclusions=watch.get("user_exclusions"),
+                    condition=watch.get("condition"),
                 )
                 repository.replace_watch_listings(
                     watch["id"],

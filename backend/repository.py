@@ -7,7 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from backend.database import get_connection
-from backend.search_config import WATCH_CATEGORIES
+from backend.search_config import WATCH_CATEGORIES, WATCH_CONDITIONS
 
 POLLING_OPTIONS = {15, 30, 60, 360, 720}
 
@@ -45,6 +45,13 @@ def _normalize_category(value: Any) -> str:
     if category not in WATCH_CATEGORIES:
         raise ValueError("Invalid category")
     return category
+
+
+def _normalize_condition(value: Any) -> str:
+    condition = str(value or "Any").strip() or "Any"
+    if condition not in WATCH_CONDITIONS:
+        raise ValueError("Invalid condition")
+    return condition
 
 
 class ScoutrrRepository:
@@ -101,7 +108,7 @@ class ScoutrrRepository:
         with get_connection() as connection:
             return connection.execute(
                 """
-                SELECT id, query, category, user_exclusions, polling_interval_minutes, last_refreshed, created_at
+                SELECT id, query, category, user_exclusions, condition, polling_interval_minutes, last_refreshed, created_at
                 FROM watches
                 WHERE polling_interval_minutes IS NOT NULL
                 ORDER BY created_at ASC
@@ -112,6 +119,7 @@ class ScoutrrRepository:
         watch_id = payload.get("id") or _new_id("watch")
         polling_interval_minutes = _normalize_polling_interval(payload.get("polling_interval_minutes", 60))
         category = _normalize_category(payload.get("category", "Any"))
+        condition = _normalize_condition(payload.get("condition", "Any"))
         with get_connection() as connection:
             connection.execute(
                 """
@@ -129,7 +137,7 @@ class ScoutrrRepository:
                     payload.get("user_exclusions"),
                     payload.get("min_price"),
                     payload.get("max_price"),
-                    payload.get("condition"),
+                    condition,
                     payload.get("build_id"),
                     polling_interval_minutes,
                     payload.get("veto_listing_id"),
@@ -149,6 +157,9 @@ class ScoutrrRepository:
         if "user_exclusions" in payload:
             fields.append("user_exclusions = ?")
             values.append(payload.get("user_exclusions") or None)
+        if "condition" in payload:
+            fields.append("condition = ?")
+            values.append(_normalize_condition(payload.get("condition")))
         if not fields:
             return self.get_watch(watch_id)
         values.append(watch_id)

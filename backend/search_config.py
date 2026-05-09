@@ -52,3 +52,16 @@ CATEGORY_EXCLUSIONS = {
 }
 
 WATCH_CATEGORIES = list(CATEGORY_EXCLUSIONS.keys())
+
+CONDITION_ID_MAP = {
+    "Any": None,
+    "New": "1000",
+    "Open Box": "1500",
+    "Seller Refurbished": "2500",
+    "Used - Excellent": "3000",
+    "Used - Very Good": "4000",
+    "Used - Good": "5000",
+    "For Parts / Not Working": "7000",
+}
+
+WATCH_CONDITIONS = list(CONDITION_ID_MAP.keys())
