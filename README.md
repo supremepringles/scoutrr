@@ -1,21 +1,23 @@
 # Scoutrr
 
-> Watch used tech like a hawk, without living in fifteen browser tabs.
+> Track used gear without babysitting a pile of saved searches.
 
-Scoutrr is a self-hosted deal tracker for homelab people hunting secondhand gear. You give it searches you actually care about, it pulls live eBay listings, keeps a lightweight local database, and helps you compare watch lists against build budgets.
+Scoutrr is a small self-hosted app for watching secondhand tech deals.
 
-If you've ever had a lab upgrade turn into a mess of saved searches, sticky notes, and "wait, was that OptiPlex actually a good deal?" tabs, that's the problem this project is trying to solve.
+I built it because I got tired of doing this by hand. Too many tabs. Too many saved searches. Too much guessing about whether a listing was actually good once shipping got added.
+
+Right now it is focused on eBay. You create watches, pull in live listings, and compare those results against build budgets.
 
 ## What it does
 
-- Creates persistent watches for parts, systems, and random homelab rabbit holes
+- Creates persistent watches for parts, systems, and other gear
 - Pulls live eBay listings into each watch
-- Calculates top-runner listings by total cost, not just sticker price
+- Ranks top listings by total cost, not just item price
 - Tracks builds with budgets and warning thresholds
 - Stores sold-history entries for comps
-- Exposes a small FastAPI backend for the UI and automation hooks
-- Ships with systemd units for a clean always-on self-hosted setup
-- Handles eBay marketplace account deletion notifications for compliance
+- Exposes a FastAPI backend for the UI and automation hooks
+- Includes systemd units for running it full-time
+- Handles eBay marketplace account deletion notifications
 
 ## Feature list
 
@@ -26,7 +28,7 @@ If you've ever had a lab upgrade turn into a mess of saved searches, sticky note
 - eBay Browse API integration with OAuth client credentials
 - eBay deletion-notification endpoint with challenge validation support
 - systemd service files for backend and frontend
-- Clean `.env`-based configuration
+- `.env`-based configuration
 
 ## Tech stack
 
@@ -34,7 +36,7 @@ If you've ever had a lab upgrade turn into a mess of saved searches, sticky note
 - **Frontend:** React + Vite
 - **Database:** SQLite
 - **Runtime:** Python 3.12+, Node 20+
-- **Deployment style:** self-hosted on a Linux box with systemd
+- **Deployment style:** Linux box with systemd
 
 ## Self-hosted setup
 
@@ -51,13 +53,13 @@ cd scoutrr
 cp .env.example .env
 ```
 
-Then open `.env` and fill in the values you actually need:
+Then fill in the values you need in `.env`:
 
 - `EBAY_CLIENT_ID`
 - `EBAY_CLIENT_SECRET`
 - `EBAY_DELETION_TOKEN`
 - `EBAY_DELETION_ENDPOINT_URL`
-- optionally `DISCORD_WEBHOOK_URL`
+- optional: `DISCORD_WEBHOOK_URL`
 
 ### 3) Create the Python venv and install backend deps
 
@@ -87,7 +89,7 @@ sudo systemctl enable --now scoutrr-backend.service
 sudo systemctl enable --now scoutrr-frontend.service
 ```
 
-If you're deploying somewhere other than `/home/YOUR_USERNAME/projects/scoutrr`, update the paths in both service files before installing them.
+If your repo lives somewhere else, update the paths in both service files first.
 
 ### 6) Check service status
 
@@ -113,13 +115,13 @@ VITE_API_BASE_URL=http://127.0.0.1:8010 npm run dev
 
 ## Getting eBay API keys
 
-You’ll need eBay Developer Program credentials for live search.
+You need an eBay Developer Program keyset for live search.
 
 1. Go to https://developer.ebay.com/
 2. Sign in or create a developer account
 3. Create an application keyset
-4. Copy your **Client ID** and **Client Secret** into `.env`
-5. For deletion notifications, register your public callback URL and token in the notifications settings
+4. Copy the **Client ID** and **Client Secret** into `.env`
+5. For deletion notifications, register the public callback URL and token in the notifications settings
 
 Scoutrr uses:
 
@@ -137,38 +139,26 @@ Placeholder for now:
 - Build planner
 - Sold comps view
 
-If you deploy this and make it look better, screenshots are very welcome.
-
 ## Roadmap
 
-Planned or likely next:
-
 - Amazon support
-- Discord alerts for price drops / watch hits
+- Discord alerts
 - Craigslist support
 - Better mobile UI
 - Smarter sold-comp ingestion
-- More build-planner quality-of-life stuff
+- Import/export for watches and builds
 
 ## Contributing
 
 PRs are welcome.
 
-If you want to add marketplaces, improve the frontend, tighten the API, or make the self-hosting story smoother, go for it. Small focused changes are easier to review than giant rewrites.
-
-A few good contribution targets:
-
-- new marketplace adapters
-- auth / multi-user groundwork
-- richer alerting
-- UI cleanup for narrow screens
-- import/export tools for watches and builds
+If you want to add a marketplace, clean up the UI, or tighten the backend, feel free.
 
 ## Security notes
 
 - Keep real secrets in `.env` only
 - Do not commit `.env`, databases, logs, or local build output
-- Rotate any credentials immediately if they were ever exposed
+- Rotate credentials immediately if they were ever exposed
 
 ## License
 
