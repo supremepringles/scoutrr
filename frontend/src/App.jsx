@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import Watches from './pages/Watches';
 import Builds from './pages/Builds';
@@ -88,10 +89,7 @@ export default function App() {
       }
       const createdWatch = await createRes.json();
 
-      const ingestRes = await fetch(
-        `${API_BASE}/search/watches/${createdWatch.id}/ingest?q=${encodeURIComponent(formData.query)}`,
-        { method: 'POST' }
-      );
+      const ingestRes = await fetch(`${API_BASE}/search/watches/${createdWatch.id}/ingest`, { method: 'POST' });
       if (!ingestRes.ok) {
         throw new Error(`Watch ingest failed with ${ingestRes.status}`);
       }
@@ -148,10 +146,7 @@ export default function App() {
     setRefreshingWatchId(watch.id);
     setWatchErrors((current) => ({ ...current, [watch.id]: '' }));
     try {
-      const response = await fetch(
-        `${API_BASE}/search/watches/${watch.id}/ingest?q=${encodeURIComponent(watch.query)}`,
-        { method: 'POST' }
-      );
+      const response = await fetch(`${API_BASE}/search/watches/${watch.id}/ingest`, { method: 'POST' });
       if (!response.ok) {
         const detail = await response.text();
         throw new Error(detail || `Refresh failed with ${response.status}`);
@@ -191,14 +186,14 @@ export default function App() {
     }
   }
 
-  async function handleUpdateWatch(watch, pollingIntervalMinutes) {
+  async function handleUpdateWatch(watch, patch) {
     setUpdatingWatchId(watch.id);
     setWatchErrors((current) => ({ ...current, [watch.id]: '' }));
     try {
       const response = await fetch(`${API_BASE}/watches/${watch.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ polling_interval_minutes: pollingIntervalMinutes }),
+        body: JSON.stringify(patch),
       });
       if (!response.ok) {
         const detail = await response.text();
@@ -276,14 +271,14 @@ export default function App() {
     <div className="app-shell">
       <aside className="sidebar card">
         <div className="sidebar-brand">
-          <a className="wordmark" href="#dashboard">Scoutrr</a>
+          <Link className="wordmark" to="/">Scoutrr</Link>
           <p className="muted">Used gear tracker</p>
         </div>
         <nav className="sidebar-nav">
-          <a href="#dashboard">Dashboard</a>
-          <a href="#watches">Watches</a>
-          <a href="#builds">Builds</a>
-          <a href="#history">Sold history</a>
+          <NavLink to="/" end>Dashboard</NavLink>
+          <NavLink to="/watches">Watches</NavLink>
+          <NavLink to="/builds">Builds</NavLink>
+          <NavLink to="/history">Sold history</NavLink>
         </nav>
         <div className="sidebar-meta muted">
           <span>{meta?.theme || 'thinkcentre-dark'}</span>
@@ -293,44 +288,54 @@ export default function App() {
       <main className="content">
         {error ? <section className="card error-card">{error}</section> : null}
         {loading ? <section className="card muted">Loading live Scoutrr data…</section> : null}
-        <section id="dashboard">
-          <Dashboard watches={watches} />
-        </section>
-        <section id="watches">
-          <Watches
-            watches={watches}
-            builds={builds}
-            onCreateWatch={handleCreateWatch}
-            onDeleteWatch={handleDeleteWatch}
-            onRefreshWatch={handleRefreshWatch}
-            onChooseListing={handleChooseListing}
-            onUpdateWatch={handleUpdateWatch}
-            deletingWatchId={deletingWatchId}
-            refreshingWatchId={refreshingWatchId}
-            pinningWatchId={pinningWatchId}
-            updatingWatchId={updatingWatchId}
-            watchErrors={watchErrors}
-            busy={watchFormBusy}
+        <Routes>
+          <Route path="/" element={<Dashboard watches={watches} />} />
+          <Route
+            path="/watches"
+            element={
+              <Watches
+                watches={watches}
+                builds={builds}
+                onCreateWatch={handleCreateWatch}
+                onDeleteWatch={handleDeleteWatch}
+                onRefreshWatch={handleRefreshWatch}
+                onChooseListing={handleChooseListing}
+                onUpdateWatch={handleUpdateWatch}
+                deletingWatchId={deletingWatchId}
+                refreshingWatchId={refreshingWatchId}
+                pinningWatchId={pinningWatchId}
+                updatingWatchId={updatingWatchId}
+                watchErrors={watchErrors}
+                busy={watchFormBusy}
+              />
+            }
           />
-        </section>
-        <section id="builds">
-          <Builds
-            builds={builds}
-            onCreateBuild={handleCreateBuild}
-            onDeleteBuild={handleDeleteBuild}
-            deletingBuildId={deletingBuildId}
-            creatingBuild={buildFormBusy}
+          <Route
+            path="/builds"
+            element={
+              <Builds
+                builds={builds}
+                onCreateBuild={handleCreateBuild}
+                onDeleteBuild={handleDeleteBuild}
+                deletingBuildId={deletingBuildId}
+                creatingBuild={buildFormBusy}
+              />
+            }
           />
-        </section>
-        <section id="history">
-          <History
-            history={history}
-            onCreateHistory={handleCreateHistory}
-            onDeleteHistory={handleDeleteHistory}
-            deletingHistoryId={deletingHistoryId}
-            creatingHistory={historyFormBusy}
+          <Route
+            path="/history"
+            element={
+              <History
+                history={history}
+                onCreateHistory={handleCreateHistory}
+                onDeleteHistory={handleDeleteHistory}
+                deletingHistoryId={deletingHistoryId}
+                creatingHistory={historyFormBusy}
+              />
+            }
           />
-        </section>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
     </div>
   );

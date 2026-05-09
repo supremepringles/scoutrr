@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from typing import List
@@ -11,6 +12,9 @@ from urllib.request import Request, urlopen
 
 from backend.config import settings
 from backend.models import Listing
+from backend.search_config import CATEGORY_EXCLUSIONS
+
+log = logging.getLogger(__name__)
 
 
 class EbayConfigError(RuntimeError):
@@ -30,9 +34,31 @@ class EbayClient:
         self._access_token: str | None = None
         self._token_expires_at: float = 0
 
-    def search(self, query: str) -> List[Listing]:
+    def build_query(self, query: str, category: str | None = None, user_exclusions: str | None = None) -> str:
+        negative_terms: list[str] = []
+        negative_terms.extend(CATEGORY_EXCLUSIONS.get("Any", []))
+        if category and category != "Any":
+            negative_terms.extend(CATEGORY_EXCLUSIONS.get(category, []))
+        if user_exclusions:
+            negative_terms.extend(_split_exclusions(user_exclusions))
+
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for term in negative_terms:
+            normalized = term.strip().lower()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(term.strip())
+
+        final_query = " ".join([query.strip(), *[f'-{term}' for term in deduped]]).strip()
+        return final_query
+
+    def search(self, query: str, category: str | None = None, user_exclusions: str | None = None) -> List[Listing]:
         token = self._get_access_token()
-        params = urlencode({"q": query, "limit": 25})
+        final_query = self.build_query(query, category=category, user_exclusions=user_exclusions)
+        log.info("Scoutrr eBay query: %s", final_query)
+        params = urlencode({"q": final_query, "limit": 25})
         request = Request(f"{self.SEARCH_URL}?{params}")
         request.add_header("Authorization", f"Bearer {token}")
         request.add_header("Accept", "application/json")
@@ -50,14 +76,12 @@ class EbayClient:
         items = payload.get("itemSummaries", [])
         listings: list[Listing] = []
         for item in items:
-            price_value = _to_float(item.get("price", {}).get("value"))
-            shipping_value = _extract_shipping(item)
             listings.append(
                 Listing(
                     id=item.get("itemId") or item.get("legacyItemId") or item.get("itemWebUrl", "unknown"),
                     title=item.get("title", "Untitled listing"),
-                    price=price_value,
-                    shipping=shipping_value,
+                    price=_to_float(item.get("price", {}).get("value")),
+                    shipping=_extract_shipping(item),
                     condition=item.get("condition", "Unknown"),
                     url=item.get("itemWebUrl", ""),
                     image_url=_extract_image(item),
@@ -97,6 +121,10 @@ class EbayClient:
         self._access_token = payload["access_token"]
         self._token_expires_at = now + int(payload.get("expires_in", 7200))
         return self._access_token
+
+
+def _split_exclusions(value: str) -> list[str]:
+    return [term.strip() for term in value.split(",") if term.strip()]
 
 
 def _to_float(value: object) -> float:

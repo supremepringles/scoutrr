@@ -10,9 +10,9 @@ client = EbayClient()
 
 
 @router.get("")
-def search_listings(q: str = Query(..., min_length=2)):
+def search_listings(q: str = Query(..., min_length=2), category: str | None = Query(None), exclusions: str | None = Query(None)):
     try:
-        listings = client.search(q)
+        listings = client.search(q, category=category, user_exclusions=exclusions)
     except EbayConfigError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except EbayApiError as exc:
@@ -43,31 +43,35 @@ def search_listings(q: str = Query(..., min_length=2)):
 
 
 @router.post("/watches/{watch_id}/ingest")
-def ingest_search_results(watch_id: str, q: str = Query(..., min_length=2)):
+def ingest_search_results(watch_id: str):
     try:
-        listings = client.search(q)
+        watch = repository.get_watch(watch_id)
+        listings = client.search(
+            watch["query"],
+            category=watch.get("category"),
+            user_exclusions=watch.get("user_exclusions"),
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Watch not found") from None
     except EbayConfigError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except EbayApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    try:
-        return repository.replace_watch_listings(
-            watch_id,
-            [
-                {
-                    "id": listing.id,
-                    "title": listing.title,
-                    "price": listing.price,
-                    "shipping": listing.shipping,
-                    "condition": listing.condition,
-                    "source": listing.source,
-                    "listing_age_hours": listing.listing_age_hours,
-                    "url": listing.url,
-                    "image_url": listing.image_url,
-                }
-                for listing in listings
-            ],
-        )
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Watch not found") from None
+    return repository.replace_watch_listings(
+        watch_id,
+        [
+            {
+                "id": listing.id,
+                "title": listing.title,
+                "price": listing.price,
+                "shipping": listing.shipping,
+                "condition": listing.condition,
+                "source": listing.source,
+                "listing_age_hours": listing.listing_age_hours,
+                "url": listing.url,
+                "image_url": listing.image_url,
+            }
+            for listing in listings
+        ],
+    )

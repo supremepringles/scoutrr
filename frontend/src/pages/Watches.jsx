@@ -1,11 +1,28 @@
 import { useState } from 'react';
 import WatchCard from '../components/WatchCard';
 
+const CATEGORY_OPTIONS = [
+  'Any',
+  'Desktop PC',
+  'Laptop',
+  'RAM',
+  'Storage - HDD',
+  'Storage - SSD',
+  'Storage - NVMe',
+  'Networking',
+  'GPU',
+  'CPU',
+  'Server',
+  'Raspberry Pi / SBC',
+];
+
 const initialForm = {
   name: '',
   query: '',
   broad: false,
   build_id: '',
+  category: 'Any',
+  user_exclusions: '',
   condition: '',
   min_price: '',
   max_price: '',
@@ -36,6 +53,8 @@ export default function Watches({
       query: form.query,
       broad: form.broad,
       build_id: form.build_id || null,
+      category: form.category,
+      user_exclusions: form.user_exclusions || null,
       condition: form.condition || null,
       min_price: form.min_price ? Number(form.min_price) : null,
       max_price: form.max_price ? Number(form.max_price) : null,
@@ -53,7 +72,7 @@ export default function Watches({
       <div className="section-head">
         <div>
           <h2>Watches</h2>
-          <span className="muted">Create a watch, refresh it on demand, or let it poll on its own interval.</span>
+          <span className="muted">Category exclusions run automatically. Custom exclusions layer on top when you need them.</span>
         </div>
       </div>
 
@@ -77,10 +96,18 @@ export default function Watches({
             <span>Build</span>
             <select value={form.build_id} onChange={(e) => updateField('build_id', e.target.value)}>
               <option value="">Standalone watch</option>
-              {builds.map((build) => (
-                <option key={build.id} value={build.id}>{build.name}</option>
-              ))}
+              {builds.map((build) => <option key={build.id} value={build.id}>{build.name}</option>)}
             </select>
+          </label>
+          <label>
+            <span>Category</span>
+            <select value={form.category} onChange={(e) => updateField('category', e.target.value)}>
+              {CATEGORY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Exclude keywords</span>
+            <input value={form.user_exclusions} onChange={(e) => updateField('user_exclusions', e.target.value)} placeholder="e.g. case, adapter, lot  (comma separated)" />
           </label>
           <label>
             <span>Condition</span>
@@ -127,6 +154,7 @@ export default function Watches({
             pinning={pinningWatchId === watch.id}
             updating={updatingWatchId === watch.id}
             error={watchErrors?.[watch.id]}
+            categoryOptions={CATEGORY_OPTIONS}
           />
         )) : <div className="card muted">No watches yet.</div>}
       </div>

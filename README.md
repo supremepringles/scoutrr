@@ -16,102 +16,67 @@ Right now it is focused on eBay. You create watches, pull in live listings, and 
 - Tracks builds with budgets and warning thresholds
 - Stores sold-history entries for comps
 - Exposes a FastAPI backend for the UI and automation hooks
-- Includes systemd units for running it full-time
 - Handles eBay marketplace account deletion notifications
+- Runs fully through Docker Compose
 
 ## Feature list
 
-- Dark-mode React dashboard
+- Dark-mode React dashboard with real page routes
 - Watch creation flow wired to live backend ingestion
 - Build planner with budget health bars
+- Smart search filtering with auto category exclusions + per-watch custom exclusions
 - SQLite-backed local persistence
 - eBay Browse API integration with OAuth client credentials
 - eBay deletion-notification endpoint with challenge validation support
-- systemd service files for backend and frontend
 - `.env`-based configuration
+- Dockerized backend + frontend services
 
 ## Tech stack
 
 - **Backend:** FastAPI + Uvicorn
 - **Frontend:** React + Vite
+- **Frontend serving:** Nginx
 - **Database:** SQLite
-- **Runtime:** Python 3.12+, Node 20+
-- **Deployment style:** Linux box with systemd
+- **Deployment style:** Docker Compose
 
-## Self-hosted setup
+## Install
 
-### 1) Clone the repo
+That’s the whole install flow:
 
 ```bash
-git clone https://github.com/yourname/scoutrr.git
+git clone https://github.com/supremepringles/scoutrr.git
 cd scoutrr
-```
-
-### 2) Copy the example env file
-
-```bash
 cp .env.example .env
+# fill in your eBay keys and deletion settings in .env
+docker compose up -d
 ```
 
-Then fill in the values you need in `.env`:
+Once it is up:
+
+- Frontend: `http://localhost:${FRONTEND_PORT:-3010}`
+- Backend API: `http://localhost:${BACKEND_PORT:-8010}`
+
+Notes:
+
+- Docker Compose reads `.env` automatically
+- The backend keeps `scoutrr.db` and `scoutrr.log` in a persistent Docker volume mounted at `/data`
+- The frontend is built once in Docker and served by Nginx
+- If ports `8010` or `3010` are already in use on your machine, change `BACKEND_PORT` or `FRONTEND_PORT` in `.env`
+
+## Required `.env` values
+
+At minimum, fill in:
 
 - `EBAY_CLIENT_ID`
 - `EBAY_CLIENT_SECRET`
 - `EBAY_DELETION_TOKEN`
 - `EBAY_DELETION_ENDPOINT_URL`
-- optional: `DISCORD_WEBHOOK_URL`
 
-### 3) Create the Python venv and install backend deps
+Optional:
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 4) Install frontend deps
-
-```bash
-cd frontend
-npm install
-cd ..
-```
-
-### 5) Install the systemd services
-
-Before installing them, open both service files and replace `YOUR_USERNAME` with your actual Linux username everywhere, including the `User=` line and all `/home/YOUR_USERNAME/...` paths.
-
-```bash
-sudo install -m 0644 /home/YOUR_USERNAME/projects/scoutrr/systemd/scoutrr-backend.service /etc/systemd/system/scoutrr-backend.service
-sudo install -m 0644 /home/YOUR_USERNAME/projects/scoutrr/systemd/scoutrr-frontend.service /etc/systemd/system/scoutrr-frontend.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now scoutrr-backend.service
-sudo systemctl enable --now scoutrr-frontend.service
-```
-
-If your repo lives somewhere else, update the paths in both service files first.
-
-### 6) Check service status
-
-```bash
-systemctl status scoutrr-backend.service scoutrr-frontend.service
-```
-
-### Optional: run it manually first
-
-Backend:
-
-```bash
-source venv/bin/activate
-python -m backend.main
-```
-
-Frontend:
-
-```bash
-cd frontend
-VITE_API_BASE_URL=http://127.0.0.1:8010 npm run dev
-```
+- `DISCORD_WEBHOOK_URL`
+- `EBAY_MARKETPLACE_ID`
+- `BUDGET_WARNING_THRESHOLD`
 
 ## Getting eBay API keys
 

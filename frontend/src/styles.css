@@ -90,6 +90,12 @@ img { display: block; max-width: 100%; }
   background: rgba(204, 0, 0, 0.08);
 }
 
+.sidebar-nav a.active {
+  border-color: rgba(204, 0, 0, 0.35);
+  background: rgba(204, 0, 0, 0.14);
+  color: #fff;
+}
+
 .sidebar-meta {
   display: grid;
   gap: 4px;
@@ -196,7 +202,8 @@ img { display: block; max-width: 100%; }
 .watch-form select,
 .watch-form textarea,
 .history-filter-bar select,
-.watch-inline-select {
+.watch-inline-select,
+.watch-inline-input {
   width: 100%;
   background: #232326;
   color: var(--text);
@@ -224,7 +231,8 @@ img { display: block; max-width: 100%; }
 }
 .watch-header,
 .watch-toolbar,
-.watch-delete-row {
+.watch-delete-row,
+.watch-edit-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -242,9 +250,15 @@ img { display: block; max-width: 100%; }
   color: #ffb1b1;
   font-size: 0.92rem;
 }
+.small-muted {
+  font-size: 0.85rem;
+}
 .watch-inline-select {
   width: auto;
   min-width: 120px;
+}
+.watch-inline-input {
+  min-width: 240px;
 }
 .watch-listings {
   display: grid;
@@ -496,7 +510,7 @@ img { display: block; max-width: 100%; }
 
 @media (max-width: 700px) {
   .listing-price-stack, .build-stats { grid-template-columns: 1fr; }
-  .section-head, .compact-head, .listing-card-actions, .watch-listing-row, .watch-header, .watch-toolbar, .watch-delete-row {
+  .section-head, .compact-head, .listing-card-actions, .watch-listing-row, .watch-header, .watch-toolbar, .watch-delete-row, .watch-edit-row {
     flex-direction: column;
     align-items: flex-start;
   }

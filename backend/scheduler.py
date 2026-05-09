@@ -54,7 +54,11 @@ class WatchPoller:
             if age_seconds < int(interval) * 60:
                 continue
             try:
-                listings = self._client.search(watch["query"])
+                listings = self._client.search(
+                    watch["query"],
+                    category=watch.get("category"),
+                    user_exclusions=watch.get("user_exclusions"),
+                )
                 repository.replace_watch_listings(
                     watch["id"],
                     [
