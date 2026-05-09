@@ -1,0 +1,20 @@
+[Unit]
+Description=Scoutrr FastAPI backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/home/YOUR_USERNAME/projects/scoutrr
+EnvironmentFile=/home/YOUR_USERNAME/projects/scoutrr/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/home/YOUR_USERNAME/projects/scoutrr/venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/YOUR_USERNAME/projects/scoutrr/venv/bin/python -m backend.main
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/YOUR_USERNAME/projects/scoutrr/scoutrr.log
+StandardError=append:/home/YOUR_USERNAME/projects/scoutrr/scoutrr.log
+
+[Install]
+WantedBy=multi-user.target

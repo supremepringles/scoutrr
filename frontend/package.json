@@ -1,0 +1,20 @@
+{
+  "name": "scoutrr-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/check-port.mjs",
+    "dev": "vite --host 0.0.0.0 --port ${FRONTEND_PORT:-3010} --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port ${FRONTEND_PORT:-3010}"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "@vitejs/plugin-react": "^4.3.1"
+  }
+}

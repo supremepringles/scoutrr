@@ -1,0 +1,20 @@
+[Unit]
+Description=Scoutrr React frontend
+After=network-online.target scoutrr-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/home/YOUR_USERNAME/projects/scoutrr/frontend
+EnvironmentFile=/home/YOUR_USERNAME/projects/scoutrr/.env
+Environment=VITE_API_BASE_URL=http://127.0.0.1:8010
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env bash -lc 'npm run build && npm run preview'
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/YOUR_USERNAME/projects/scoutrr/scoutrr.log
+StandardError=append:/home/YOUR_USERNAME/projects/scoutrr/scoutrr.log
+
+[Install]
+WantedBy=multi-user.target
