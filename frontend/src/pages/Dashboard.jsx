@@ -1,4 +1,5 @@
 import ListingCard from '../components/ListingCard';
+import ManualListingForm from '../components/ManualListingForm';
 
 function getRecommendedListings(watches) {
   return watches
@@ -22,48 +23,57 @@ function getRecommendedListings(watches) {
     });
 }
 
-export default function Dashboard({ watches }) {
+export default function Dashboard({ watches, onCreateManualListing, manualListingBusy }) {
   const recommendedListings = getRecommendedListings(watches);
 
   if (!watches.length) {
     return (
-      <section className="card empty-state">
-        <div className="card-kicker">Dashboard</div>
-        <h1>No watches yet</h1>
-        <p className="muted">Create your first watch to start pulling recommended listings.</p>
-      </section>
-    );
-  }
-
-  if (!recommendedListings.length) {
-    return (
-      <section className="card empty-state">
-        <div className="card-kicker">Dashboard</div>
-        <h1>No listings yet</h1>
-        <p className="muted">Refresh your watches to load listings.</p>
+      <section className="page-grid">
+        <section className="card empty-state">
+          <div className="card-kicker">Dashboard</div>
+          <h1>No watches yet</h1>
+          <p className="muted">Create your first watch to start pulling recommended listings.</p>
+        </section>
       </section>
     );
   }
 
   return (
     <section className="page-grid">
-      <div className="section-head">
-        <div>
-          <div className="card-kicker">Dashboard</div>
-          <h1>Recommended listings</h1>
+      <div className="dashboard-toolbar">
+        <div className="section-head">
+          <div>
+            <div className="card-kicker">Dashboard</div>
+            <h1>Recommended listings</h1>
+          </div>
         </div>
+        <ManualListingForm
+          watches={watches}
+          onSubmit={onCreateManualListing}
+          busy={manualListingBusy}
+          title="Manual listing"
+        />
       </div>
-      <div className="listing-grid listing-grid-three">
-        {recommendedListings.map((listing) => (
-          <ListingCard
-            key={`${listing.watchId}-${listing.id}`}
-            listing={listing}
-            watchName={listing.watchName}
-            showWatchName
-            isTopRunner={listing.isTopRunner}
-          />
-        ))}
-      </div>
+
+      {recommendedListings.length ? (
+        <div className="listing-grid listing-grid-three">
+          {recommendedListings.map((listing) => (
+            <ListingCard
+              key={`${listing.watchId}-${listing.id}`}
+              listing={listing}
+              watchName={listing.watchName}
+              showWatchName
+              isTopRunner={listing.isTopRunner}
+            />
+          ))}
+        </div>
+      ) : (
+        <section className="card empty-state">
+          <div className="card-kicker">Dashboard</div>
+          <h2>No listings yet</h2>
+          <p className="muted">Refresh your watches to load listings.</p>
+        </section>
+      )}
     </section>
   );
 }

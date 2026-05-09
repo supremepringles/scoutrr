@@ -17,6 +17,7 @@ class Listing:
     image_url: str = ""
     vetoed: bool = False
     is_pinned: bool = False
+    cost_per_unit_label: str = ""
 
     @property
     def total_cost(self) -> float:
@@ -32,6 +33,8 @@ class Watch:
     min_price: Optional[float] = None
     max_price: Optional[float] = None
     condition: Optional[str] = None
+    seller_usernames: Optional[str] = None
+    region: str = "US"
     top_runner_id: Optional[str] = None
     veto_listing_id: Optional[str] = None
     polling_interval_minutes: Optional[int] = 60

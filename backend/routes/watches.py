@@ -48,6 +48,17 @@ def create_listing(watch_id: str, payload: dict[str, Any]):
         return repository.create_listing(watch_id, payload)
     except KeyError:
         raise HTTPException(status_code=404, detail="Watch not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/{watch_id}/listings/{listing_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_listing(watch_id: str, listing_id: str) -> Response:
+    try:
+        repository.delete_listing(watch_id, listing_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Listing not found") from None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{watch_id}/veto")

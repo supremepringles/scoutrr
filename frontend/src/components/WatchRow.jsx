@@ -16,8 +16,10 @@ export default function WatchRow({ watch, onDelete, deleting }) {
         <div className="pill-row watch-row-pills compact-pills">
           <span className="pill pill-neutral">{watch.category || 'Any'}</span>
           <ConditionBadge condition={watch.condition || 'Any'} />
+          <span className="pill pill-neutral">{watch.region || 'US'}</span>
           <span className="pill pill-neutral">{formatPollingInterval(watch.polling_interval_minutes)}</span>
           <span className="pill">{watch.broad ? 'Broad' : 'Specific'}</span>
+          {watch.seller_usernames ? <span className="pill pill-neutral">Seller: {watch.seller_usernames}</span> : null}
         </div>
       </div>
       <div className="watch-row-actions">

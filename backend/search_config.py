@@ -65,3 +65,16 @@ CONDITION_ID_MAP = {
 }
 
 WATCH_CONDITIONS = list(CONDITION_ID_MAP.keys())
+
+REGION_MARKETPLACE_MAP = {
+    "US": "EBAY_US",
+    "UK": "EBAY_GB",
+    "Germany": "EBAY_DE",
+    "Canada": "EBAY_CA",
+    "Australia": "EBAY_AU",
+    "France": "EBAY_FR",
+    "Italy": "EBAY_IT",
+    "Spain": "EBAY_ES",
+}
+
+WATCH_REGIONS = list(REGION_MARKETPLACE_MAP.keys())

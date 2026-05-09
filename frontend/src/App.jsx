@@ -21,9 +21,11 @@ export default function App() {
   const [deletingWatchId, setDeletingWatchId] = useState('');
   const [deletingBuildId, setDeletingBuildId] = useState('');
   const [deletingHistoryId, setDeletingHistoryId] = useState('');
+  const [deletingListingId, setDeletingListingId] = useState('');
   const [refreshingWatchId, setRefreshingWatchId] = useState('');
   const [pinningWatchId, setPinningWatchId] = useState('');
   const [updatingWatchId, setUpdatingWatchId] = useState('');
+  const [manualListingBusy, setManualListingBusy] = useState(false);
   const [watchErrors, setWatchErrors] = useState({});
 
   async function loadData({ silent = false } = {}) {
@@ -145,6 +147,34 @@ export default function App() {
     }
   }
 
+  async function handleCreateManualListing(watchId, payload) {
+    if (!watchId) {
+      setError('Choose a watch for the manual listing');
+      return null;
+    }
+    setManualListingBusy(true);
+    setWatchErrors((current) => ({ ...current, [watchId]: '' }));
+    try {
+      const response = await fetch(`${API_BASE}/watches/${watchId}/listings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || `Manual listing failed with ${response.status}`);
+      }
+      const created = await response.json();
+      await loadData({ silent: true });
+      return created;
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to add manual listing');
+      return null;
+    } finally {
+      setManualListingBusy(false);
+    }
+  }
+
   async function handleRefreshWatch(watch) {
     setRefreshingWatchId(watch.id);
     setWatchErrors((current) => ({ ...current, [watch.id]: '' }));
@@ -234,6 +264,27 @@ export default function App() {
     }
   }
 
+  async function handleDeleteListing(watchId, listing) {
+    if (!window.confirm(`Delete listing ${listing.title}?`)) {
+      return false;
+    }
+    setDeletingListingId(listing.id);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/watches/${watchId}/listings/${listing.id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error(`Delete failed with ${response.status}`);
+      }
+      await loadData({ silent: true });
+      return true;
+    } catch (deleteError) {
+      setError(deleteError.message || `Failed to delete listing ${listing.title}`);
+      return false;
+    } finally {
+      setDeletingListingId('');
+    }
+  }
+
   async function handleDeleteBuild(build) {
     if (!window.confirm(`Delete build ${build.name}?`)) {
       return;
@@ -294,7 +345,16 @@ export default function App() {
         {error ? <section className="card error-card">{error}</section> : null}
         {loading ? <section className="card muted">Loading live Scoutrr data…</section> : null}
         <Routes>
-          <Route path="/" element={<Dashboard watches={watches} />} />
+          <Route
+            path="/"
+            element={
+              <Dashboard
+                watches={watches}
+                onCreateManualListing={handleCreateManualListing}
+                manualListingBusy={manualListingBusy}
+              />
+            }
+          />
           <Route
             path="/watches"
             element={
@@ -305,6 +365,7 @@ export default function App() {
                 onDeleteWatch={handleDeleteWatch}
                 deletingWatchId={deletingWatchId}
                 busy={watchFormBusy}
+                defaultRegion={meta?.default_region || 'US'}
               />
             }
           />
@@ -316,9 +377,13 @@ export default function App() {
                 onDeleteWatch={handleDeleteWatch}
                 onRefreshWatch={handleRefreshWatch}
                 onChooseListing={handleChooseListing}
+                onCreateManualListing={handleCreateManualListing}
+                onDeleteListing={handleDeleteListing}
                 deletingWatchId={deletingWatchId}
+                deletingListingId={deletingListingId}
                 refreshingWatchId={refreshingWatchId}
                 pinningWatchId={pinningWatchId}
+                manualListingBusy={manualListingBusy}
                 watchErrors={watchErrors}
               />
             }

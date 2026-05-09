@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import WatchRow from '../components/WatchRow';
 
@@ -28,17 +28,23 @@ const CONDITION_OPTIONS = [
   'For Parts / Not Working',
 ];
 
-const initialForm = {
-  search: '',
-  broad: false,
-  build_id: '',
-  category: 'Any',
-  user_exclusions: '',
-  condition: 'Any',
-  min_price: '',
-  max_price: '',
-  polling_interval_minutes: '60',
-};
+const REGION_OPTIONS = ['US', 'UK', 'Germany', 'Canada', 'Australia', 'France', 'Italy', 'Spain'];
+
+function createInitialForm(defaultRegion) {
+  return {
+    search: '',
+    broad: false,
+    build_id: '',
+    category: 'Any',
+    user_exclusions: '',
+    seller_usernames: '',
+    condition: 'Any',
+    region: defaultRegion || 'US',
+    min_price: '',
+    max_price: '',
+    polling_interval_minutes: '60',
+  };
+}
 
 export default function Watches({
   watches,
@@ -47,9 +53,11 @@ export default function Watches({
   onDeleteWatch,
   deletingWatchId,
   busy,
+  defaultRegion = 'US',
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const initialForm = useMemo(() => createInitialForm(defaultRegion), [defaultRegion]);
   const [form, setForm] = useState(initialForm);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -59,9 +67,21 @@ export default function Watches({
       return;
     }
     setForm({ ...initialForm, ...prefill });
-    setShowAdvanced(Boolean(prefill.user_exclusions || prefill.min_price || prefill.max_price));
+    setShowAdvanced(Boolean(prefill.user_exclusions || prefill.seller_usernames || prefill.min_price || prefill.max_price));
     navigate(location.pathname, { replace: true, state: null });
-  }, [location.pathname, location.state, navigate]);
+  }, [initialForm, location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    if (!defaultRegion || defaultRegion === 'US') {
+      return;
+    }
+    setForm((current) => {
+      if (current.search || current.region !== 'US') {
+        return current;
+      }
+      return { ...current, region: defaultRegion };
+    });
+  }, [defaultRegion]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -73,7 +93,9 @@ export default function Watches({
       build_id: form.build_id || null,
       category: form.category,
       user_exclusions: form.user_exclusions || null,
+      seller_usernames: form.seller_usernames || null,
       condition: form.condition,
+      region: form.region,
       min_price: form.min_price ? Number(form.min_price) : null,
       max_price: form.max_price ? Number(form.max_price) : null,
       polling_interval_minutes: form.polling_interval_minutes === 'off' ? 0 : Number(form.polling_interval_minutes),
@@ -134,6 +156,12 @@ export default function Watches({
             </select>
           </label>
           <label>
+            <span>Region</span>
+            <select value={form.region} onChange={(e) => updateField('region', e.target.value)}>
+              {REGION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          </label>
+          <label>
             <span>Build</span>
             <select value={form.build_id} onChange={(e) => updateField('build_id', e.target.value)}>
               <option value="">Standalone watch</option>
@@ -176,6 +204,14 @@ export default function Watches({
                   value={form.user_exclusions}
                   onChange={(e) => updateField('user_exclusions', e.target.value)}
                   placeholder="e.g. case, adapter, lot"
+                />
+              </label>
+              <label>
+                <span>Seller</span>
+                <input
+                  value={form.seller_usernames}
+                  onChange={(e) => updateField('seller_usernames', e.target.value)}
+                  placeholder="e.g. seller1, seller2"
                 />
               </label>
               <label>

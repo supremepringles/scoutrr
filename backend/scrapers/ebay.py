@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 from backend.config import settings
 from backend.models import Listing
-from backend.search_config import CATEGORY_EXCLUSIONS, CONDITION_ID_MAP
+from backend.search_config import CATEGORY_EXCLUSIONS, CONDITION_ID_MAP, REGION_MARKETPLACE_MAP
 
 log = logging.getLogger(__name__)
 
@@ -27,8 +27,18 @@ class EbayApiError(RuntimeError):
 
 class EbayClient:
     TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
-    SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
+    DEFAULT_SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
     SCOPE = "https://api.ebay.com/oauth/api_scope"
+    REGION_SEARCH_URLS = {
+        "US": DEFAULT_SEARCH_URL,
+        "UK": DEFAULT_SEARCH_URL,
+        "Germany": DEFAULT_SEARCH_URL,
+        "Canada": DEFAULT_SEARCH_URL,
+        "Australia": DEFAULT_SEARCH_URL,
+        "France": DEFAULT_SEARCH_URL,
+        "Italy": DEFAULT_SEARCH_URL,
+        "Spain": DEFAULT_SEARCH_URL,
+    }
 
     def __init__(self) -> None:
         self._access_token: str | None = None
@@ -54,19 +64,42 @@ class EbayClient:
         final_query = " ".join([query.strip(), *[f'-{term}' for term in deduped]]).strip()
         return final_query
 
-    def search(self, query: str, category: str | None = None, user_exclusions: str | None = None, condition: str | None = None) -> List[Listing]:
+    def search(
+        self,
+        query: str,
+        category: str | None = None,
+        user_exclusions: str | None = None,
+        condition: str | None = None,
+        seller_usernames: str | None = None,
+        region: str | None = None,
+    ) -> List[Listing]:
         token = self._get_access_token()
         final_query = self.build_query(query, category=category, user_exclusions=user_exclusions)
         condition_id = CONDITION_ID_MAP.get(condition or "Any")
-        log.info("Scoutrr eBay query: %s | condition=%s", final_query, condition_id or "any")
-        params_dict = {"q": final_query, "limit": 25}
+        resolved_region = region or _region_from_marketplace_id(settings.ebay_marketplace_id)
+        marketplace_id = REGION_MARKETPLACE_MAP.get(resolved_region, settings.ebay_marketplace_id)
+        seller_filters = _split_exclusions(seller_usernames or "")
+        filters: list[str] = []
         if condition_id:
-            params_dict["filter"] = f"conditionIds:{{{condition_id}}}"
+            filters.append(f"conditionIds:{{{condition_id}}}")
+        if seller_filters:
+            filters.append("sellers:{%s}" % "|".join(seller_filters))
+        log.info(
+            "Scoutrr eBay query: %s | condition=%s | sellers=%s | region=%s",
+            final_query,
+            condition_id or "any",
+            ",".join(seller_filters) or "any",
+            resolved_region,
+        )
+        params_dict = {"q": final_query, "limit": 25}
+        if filters:
+            params_dict["filter"] = ",".join(filters)
         params = urlencode(params_dict)
-        request = Request(f"{self.SEARCH_URL}?{params}")
+        search_url = self.REGION_SEARCH_URLS.get(resolved_region, self.DEFAULT_SEARCH_URL)
+        request = Request(f"{search_url}?{params}")
         request.add_header("Authorization", f"Bearer {token}")
         request.add_header("Accept", "application/json")
-        request.add_header("X-EBAY-C-MARKETPLACE-ID", settings.ebay_marketplace_id)
+        request.add_header("X-EBAY-C-MARKETPLACE-ID", marketplace_id)
 
         try:
             with urlopen(request, timeout=20) as response:
@@ -129,6 +162,14 @@ class EbayClient:
 
 def _split_exclusions(value: str) -> list[str]:
     return [term.strip() for term in value.split(",") if term.strip()]
+
+
+def _region_from_marketplace_id(marketplace_id: str | None) -> str:
+    normalized = str(marketplace_id or "").strip().upper()
+    for region, mapped_marketplace_id in REGION_MARKETPLACE_MAP.items():
+        if mapped_marketplace_id.upper() == normalized:
+            return region
+    return "US"
 
 
 def _to_float(value: object) -> float:

@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import ROOT, settings
+from backend.scrapers.ebay import _region_from_marketplace_id
 from backend.database import init_db
 from backend.routes import alerts, builds, ebay, history, search, watches
 from backend.scheduler import WatchPoller
@@ -57,6 +58,8 @@ def root():
         "accent": "lenovo-red",
         "frontend_port": settings.frontend_port,
         "database_file": settings.database_file,
+        "default_region": _region_from_marketplace_id(settings.ebay_marketplace_id),
+        "default_marketplace_id": settings.ebay_marketplace_id,
     }
 
 

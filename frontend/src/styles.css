@@ -38,6 +38,10 @@ img { display: block; max-width: 100%; }
 
 .content { display: grid; gap: 24px; }
 .page-grid, .card-grid, .listing-grid { display: grid; gap: 16px; }
+.dashboard-toolbar {
+  display: grid;
+  gap: 16px;
+}
 .inline-actions {
   display: flex;
   gap: 10px;
@@ -233,7 +237,7 @@ img { display: block; max-width: 100%; }
 
 .watch-options-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -251,13 +255,16 @@ img { display: block; max-width: 100%; }
 
 .watch-advanced-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(140px, 1fr));
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.3fr) repeat(2, minmax(140px, 1fr));
   gap: 14px;
 }
 
 .watch-form input,
 .watch-form select,
 .watch-form textarea,
+.manual-listing-form input,
+.manual-listing-form select,
+.manual-listing-form textarea,
 .history-filter-bar select,
 .watch-inline-select,
 .watch-inline-input {
@@ -317,6 +324,15 @@ img { display: block; max-width: 100%; }
 .watch-detail-header {
   display: grid;
   gap: 16px;
+}
+.manual-listing-form {
+  display: grid;
+  gap: 16px;
+}
+.manual-listing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 .watch-detail-title-row h1 {
   margin: 4px 0 0;
@@ -397,6 +413,13 @@ img { display: block; max-width: 100%; }
   padding: 0 16px 16px;
 }
 
+.listing-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .listing-title-stack {
   display: grid;
   gap: 6px;
@@ -407,6 +430,11 @@ img { display: block; max-width: 100%; }
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.listing-notes {
+  margin: 0;
+  line-height: 1.45;
 }
 
 .listing-card-body h3 {
@@ -423,6 +451,11 @@ img { display: block; max-width: 100%; }
 
 .listing-price-stack strong, .listing-price, .build-stats strong {
   font-size: 1rem;
+}
+
+.listing-metric-badge {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .listing-card-footer {
@@ -534,7 +567,8 @@ img { display: block; max-width: 100%; }
 
 @media (max-width: 900px) {
   .watch-options-row,
-  .watch-advanced-grid {
+  .watch-advanced-grid,
+  .manual-listing-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -548,6 +582,7 @@ img { display: block; max-width: 100%; }
   .watch-search-row,
   .watch-options-row,
   .watch-advanced-grid,
+  .manual-listing-grid,
   .listing-grid-three {
     grid-template-columns: 1fr;
   }

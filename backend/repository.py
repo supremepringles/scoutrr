@@ -7,9 +7,11 @@ from typing import Any
 from uuid import uuid4
 
 from backend.database import get_connection
-from backend.search_config import WATCH_CATEGORIES, WATCH_CONDITIONS
+from backend.search_config import WATCH_CATEGORIES, WATCH_CONDITIONS, WATCH_REGIONS
 
 POLLING_OPTIONS = {15, 30, 60, 360, 720}
+MANUAL_LISTING_SOURCES = {"eBay", "Facebook Marketplace", "Craigslist", "Walmart", "Best Buy", "Amazon", "Other"}
+UNIT_METRIC_CATEGORIES = {"Storage - HDD", "Storage - SSD", "RAM"}
 
 
 def _new_id(prefix: str) -> str:
@@ -54,12 +56,66 @@ def _normalize_condition(value: Any) -> str:
     return condition
 
 
+def _normalize_listing_source(value: Any) -> str:
+    source = str(value or "Other").strip() or "Other"
+    if source not in MANUAL_LISTING_SOURCES:
+        raise ValueError("Invalid listing source")
+    return source
+
+
+def _normalize_region(value: Any) -> str:
+    region = str(value or "US").strip() or "US"
+    if region not in WATCH_REGIONS:
+        raise ValueError("Invalid region")
+    return region
+
+
+def _parse_capacity_tb(title: str) -> float | None:
+    normalized = str(title or "").lower().replace(",", "")
+    import re
+    matches = re.findall(r"(\d+(?:\.\d+)?)\s*(tb|gb)", normalized)
+    if not matches:
+        return None
+    best_tb = 0.0
+    for amount_text, unit in matches:
+        amount = float(amount_text)
+        tb_value = amount if unit == "tb" else amount / 1024
+        if tb_value > best_tb:
+            best_tb = tb_value
+    return best_tb or None
+
+
+def _parse_capacity_gb(title: str) -> float | None:
+    normalized = str(title or "").lower().replace(",", "")
+    import re
+    matches = re.findall(r"(\d+(?:\.\d+)?)\s*gb", normalized)
+    if not matches:
+        return None
+    return max(float(amount_text) for amount_text in matches)
+
+
+def _build_cost_per_unit_label(category: str | None, listing: dict[str, Any]) -> str:
+    if category not in UNIT_METRIC_CATEGORIES:
+        return ""
+    total_cost = _compute_listing_total(listing)
+    title = listing.get("title", "")
+    if category in {"Storage - HDD", "Storage - SSD"}:
+        capacity_tb = _parse_capacity_tb(title)
+        if not capacity_tb:
+            return ""
+        return f"${total_cost / capacity_tb:.2f}/TB"
+    capacity_gb = _parse_capacity_gb(title)
+    if not capacity_gb:
+        return ""
+    return f"${total_cost / capacity_gb:.2f}/GB"
+
+
 class ScoutrrRepository:
     def list_watches(self) -> list[dict[str, Any]]:
         with get_connection() as connection:
             watch_rows = connection.execute(
                 """
-                SELECT id, name, query, broad, category, user_exclusions, min_price, max_price, condition, build_id,
+                SELECT id, name, query, broad, category, user_exclusions, seller_usernames, region, min_price, max_price, condition, build_id,
                        polling_interval_minutes, last_refreshed, top_runner_listing_id,
                        veto_listing_id, created_at, updated_at
                 FROM watches
@@ -68,7 +124,7 @@ class ScoutrrRepository:
             ).fetchall()
             listing_rows = connection.execute(
                 """
-                SELECT id, watch_id, title, price, shipping, condition, source, listing_age_hours,
+                SELECT id, watch_id, title, price, shipping, condition, source, source_type, notes, listing_age_hours,
                        url, image_url, is_active, is_pinned
                 FROM listings
                 WHERE is_active = 1
@@ -89,6 +145,8 @@ class ScoutrrRepository:
             watch = dict(watch)
             watch["broad"] = bool(watch["broad"])
             listings = sorted(listings_by_watch.get(watch["id"], []), key=lambda item: item["total_cost"])
+            for listing in listings:
+                listing["cost_per_unit_label"] = _build_cost_per_unit_label(watch.get("category"), listing)
             effective_listing = next((item for item in listings if item.get("is_pinned")), None)
             if effective_listing is None:
                 effective_listing = min(listings, key=lambda item: item["total_cost"], default=None)
@@ -108,7 +166,7 @@ class ScoutrrRepository:
         with get_connection() as connection:
             return connection.execute(
                 """
-                SELECT id, query, category, user_exclusions, condition, polling_interval_minutes, last_refreshed, created_at
+                SELECT id, query, category, user_exclusions, seller_usernames, region, condition, polling_interval_minutes, last_refreshed, created_at
                 FROM watches
                 WHERE polling_interval_minutes IS NOT NULL
                 ORDER BY created_at ASC
@@ -120,13 +178,14 @@ class ScoutrrRepository:
         polling_interval_minutes = _normalize_polling_interval(payload.get("polling_interval_minutes", 60))
         category = _normalize_category(payload.get("category", "Any"))
         condition = _normalize_condition(payload.get("condition", "Any"))
+        region = _normalize_region(payload.get("region", "US"))
         with get_connection() as connection:
             connection.execute(
                 """
                 INSERT INTO watches (
-                    id, name, query, broad, category, user_exclusions, min_price, max_price, condition, build_id,
+                    id, name, query, broad, category, user_exclusions, seller_usernames, region, min_price, max_price, condition, build_id,
                     polling_interval_minutes, veto_listing_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     watch_id,
@@ -135,6 +194,8 @@ class ScoutrrRepository:
                     int(bool(payload.get("broad", False))),
                     category,
                     payload.get("user_exclusions"),
+                    payload.get("seller_usernames"),
+                    region,
                     payload.get("min_price"),
                     payload.get("max_price"),
                     condition,
@@ -157,6 +218,12 @@ class ScoutrrRepository:
         if "user_exclusions" in payload:
             fields.append("user_exclusions = ?")
             values.append(payload.get("user_exclusions") or None)
+        if "seller_usernames" in payload:
+            fields.append("seller_usernames = ?")
+            values.append(payload.get("seller_usernames") or None)
+        if "region" in payload:
+            fields.append("region = ?")
+            values.append(_normalize_region(payload.get("region")))
         if "condition" in payload:
             fields.append("condition = ?")
             values.append(_normalize_condition(payload.get("condition")))
@@ -186,6 +253,12 @@ class ScoutrrRepository:
 
     def create_listing(self, watch_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         listing_id = payload.get("id") or _new_id("listing")
+        source_type = payload.get("source_type", "manual")
+        if source_type not in {"auto", "manual"}:
+            raise ValueError("Invalid listing source type")
+        source = payload.get("source", "eBay" if source_type == "auto" else "Other")
+        if source_type == "manual":
+            source = _normalize_listing_source(source)
         with get_connection() as connection:
             watch_exists = connection.execute("SELECT 1 FROM watches WHERE id = ?", (watch_id,)).fetchone()
             if watch_exists is None:
@@ -193,9 +266,9 @@ class ScoutrrRepository:
             connection.execute(
                 """
                 INSERT INTO listings (
-                    id, watch_id, title, price, shipping, condition, source,
+                    id, watch_id, title, price, shipping, condition, source, source_type, notes,
                     listing_age_hours, url, image_url, is_active, is_pinned
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     watch_id = excluded.watch_id,
                     title = excluded.title,
@@ -203,6 +276,8 @@ class ScoutrrRepository:
                     shipping = excluded.shipping,
                     condition = excluded.condition,
                     source = excluded.source,
+                    source_type = excluded.source_type,
+                    notes = excluded.notes,
                     listing_age_hours = excluded.listing_age_hours,
                     url = excluded.url,
                     image_url = excluded.image_url,
@@ -212,7 +287,7 @@ class ScoutrrRepository:
                 """,
                 (
                     listing_id, watch_id, payload["title"], payload["price"], payload.get("shipping", 0),
-                    payload.get("condition"), payload.get("source", "eBay"), payload.get("listing_age_hours", 0),
+                    payload.get("condition"), source, source_type, payload.get("notes", ""), payload.get("listing_age_hours", 0),
                     payload.get("url", ""), payload.get("image_url", ""), int(bool(payload.get("is_active", True))),
                     int(bool(payload.get("is_pinned", False))),
                 ),
@@ -225,7 +300,10 @@ class ScoutrrRepository:
             if watch_exists is None:
                 raise KeyError(watch_id)
             pinned_listing_id = watch_exists.get("veto_listing_id")
-            connection.execute("UPDATE listings SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE watch_id = ?", (watch_id,))
+            connection.execute(
+                "UPDATE listings SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE watch_id = ? AND source_type != 'manual'",
+                (watch_id,),
+            )
             active_ids: set[str] = set()
             for payload in listings:
                 listing_id = payload.get("id") or _new_id("listing")
@@ -233,9 +311,9 @@ class ScoutrrRepository:
                 connection.execute(
                     """
                     INSERT INTO listings (
-                        id, watch_id, title, price, shipping, condition, source,
+                        id, watch_id, title, price, shipping, condition, source, source_type, notes,
                         listing_age_hours, url, image_url, is_active
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'auto', '', ?, ?, ?, 1)
                     ON CONFLICT(id) DO UPDATE SET
                         watch_id = excluded.watch_id,
                         title = excluded.title,
@@ -255,8 +333,16 @@ class ScoutrrRepository:
                         payload.get("url", ""), payload.get("image_url", ""),
                     ),
                 )
+            manual_ids = {
+                row["id"]
+                for row in connection.execute(
+                    "SELECT id FROM listings WHERE watch_id = ? AND is_active = 1 AND source_type = 'manual'",
+                    (watch_id,),
+                ).fetchall()
+            }
+            combined_active_ids = active_ids | manual_ids
             connection.execute("UPDATE listings SET is_pinned = 0 WHERE watch_id = ?", (watch_id,))
-            if pinned_listing_id and pinned_listing_id in active_ids:
+            if pinned_listing_id and pinned_listing_id in combined_active_ids:
                 connection.execute("UPDATE listings SET is_pinned = 1 WHERE id = ? AND watch_id = ?", (pinned_listing_id, watch_id))
             else:
                 pinned_listing_id = None
@@ -269,7 +355,7 @@ class ScoutrrRepository:
     def get_listing(self, listing_id: str) -> dict[str, Any]:
         with get_connection() as connection:
             item = connection.execute(
-                "SELECT id, watch_id, title, price, shipping, condition, source, listing_age_hours, url, image_url, is_active, is_pinned FROM listings WHERE id = ?",
+                "SELECT id, watch_id, title, price, shipping, condition, source, source_type, notes, listing_age_hours, url, image_url, is_active, is_pinned FROM listings WHERE id = ?",
                 (listing_id,),
             ).fetchone()
         if item is None:
@@ -279,6 +365,16 @@ class ScoutrrRepository:
         item["is_active"] = bool(item["is_active"])
         item["is_pinned"] = bool(item.get("is_pinned"))
         return item
+
+    def delete_listing(self, watch_id: str, listing_id: str) -> None:
+        with get_connection() as connection:
+            cursor = connection.execute("DELETE FROM listings WHERE id = ? AND watch_id = ?", (listing_id, watch_id))
+            connection.execute(
+                "UPDATE watches SET veto_listing_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND veto_listing_id = ?",
+                (watch_id, listing_id),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(listing_id)
 
     def set_watch_veto(self, watch_id: str, listing_id: str | None) -> dict[str, Any]:
         with get_connection() as connection:

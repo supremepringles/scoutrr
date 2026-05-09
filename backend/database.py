@@ -57,6 +57,8 @@ def init_db() -> None:
                 broad INTEGER NOT NULL DEFAULT 0,
                 category TEXT NOT NULL DEFAULT 'Any',
                 user_exclusions TEXT,
+                seller_usernames TEXT,
+                region TEXT NOT NULL DEFAULT 'US',
                 min_price REAL,
                 max_price REAL,
                 condition TEXT,
@@ -80,6 +82,8 @@ def init_db() -> None:
                 shipping REAL NOT NULL DEFAULT 0,
                 condition TEXT,
                 source TEXT NOT NULL DEFAULT 'eBay',
+                source_type TEXT NOT NULL DEFAULT 'auto',
+                notes TEXT NOT NULL DEFAULT '',
                 listing_age_hours INTEGER NOT NULL DEFAULT 0,
                 url TEXT NOT NULL DEFAULT '',
                 image_url TEXT NOT NULL DEFAULT '',
@@ -118,8 +122,12 @@ def init_db() -> None:
         _ensure_column(connection, "watches", "user_exclusions", "TEXT")
         _ensure_column(connection, "watches", "polling_interval_minutes", "INTEGER NOT NULL DEFAULT 60")
         _ensure_column(connection, "watches", "last_refreshed", "TEXT")
+        _ensure_column(connection, "watches", "seller_usernames", "TEXT")
+        _ensure_column(connection, "watches", "region", "TEXT NOT NULL DEFAULT 'US'")
         _ensure_column(connection, "listings", "image_url", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "listings", "is_pinned", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(connection, "listings", "source_type", "TEXT NOT NULL DEFAULT 'auto'")
+        _ensure_column(connection, "listings", "notes", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "sold_history", "platform", "TEXT NOT NULL DEFAULT 'Other'")
         _ensure_column(connection, "sold_history", "condition", "TEXT")
         _ensure_column(connection, "sold_history", "notes", "TEXT NOT NULL DEFAULT ''")
@@ -127,7 +135,10 @@ def init_db() -> None:
 
         connection.execute("UPDATE watches SET category = 'Any' WHERE category IS NULL OR trim(category) = ''")
         connection.execute("UPDATE watches SET polling_interval_minutes = 60 WHERE polling_interval_minutes IS NULL")
+        connection.execute("UPDATE watches SET region = 'US' WHERE region IS NULL OR trim(region) = ''")
         connection.execute("UPDATE listings SET is_pinned = 0 WHERE is_pinned IS NULL")
+        connection.execute("UPDATE listings SET source_type = 'auto' WHERE source_type IS NULL OR trim(source_type) = ''")
+        connection.execute("UPDATE listings SET notes = '' WHERE notes IS NULL")
         connection.execute(
             """
             UPDATE sold_history

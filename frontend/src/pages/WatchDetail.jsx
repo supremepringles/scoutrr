@@ -1,5 +1,6 @@
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import ListingCard from '../components/ListingCard';
+import ManualListingForm from '../components/ManualListingForm';
 
 const POLLING_LABELS = { 15: '15m', 30: '30m', 60: '1h', 360: '6h', 720: '12h' };
 
@@ -27,7 +28,9 @@ function buildClonePrefill(watch) {
     build_id: watch.build_id || '',
     category: watch.category || 'Any',
     user_exclusions: watch.user_exclusions || '',
+    seller_usernames: watch.seller_usernames || '',
     condition: watch.condition || 'Any',
+    region: watch.region || 'US',
     min_price: watch.min_price ?? '',
     max_price: watch.max_price ?? '',
     polling_interval_minutes: watch.polling_interval_minutes ? String(watch.polling_interval_minutes) : 'off',
@@ -39,9 +42,13 @@ export default function WatchDetail({
   onDeleteWatch,
   onRefreshWatch,
   onChooseListing,
+  onCreateManualListing,
+  onDeleteListing,
   deletingWatchId,
+  deletingListingId,
   refreshingWatchId,
   pinningWatchId,
+  manualListingBusy,
   watchErrors,
 }) {
   const { watchId } = useParams();
@@ -98,8 +105,10 @@ export default function WatchDetail({
         <div className="pill-row watch-detail-rules">
           <span className="pill pill-neutral">{watch.category || 'Any'}</span>
           <span className="pill pill-neutral">{watch.condition || 'Any'}</span>
+          <span className="pill pill-neutral">{watch.region || 'US'}</span>
           <span className="pill pill-neutral">{formatPollingInterval(watch.polling_interval_minutes)}</span>
           <span className="pill">{watch.broad ? 'Broad' : 'Specific'}</span>
+          <span className="pill pill-neutral">Seller: {watch.seller_usernames || 'Any'}</span>
           <span className="pill pill-neutral">Exclude: {watch.user_exclusions || 'None'}</span>
           <span className="pill pill-neutral">Min: {watch.min_price != null ? `$${Number(watch.min_price).toFixed(2)}` : 'None'}</span>
           <span className="pill pill-neutral">Max: {watch.max_price != null ? `$${Number(watch.max_price).toFixed(2)}` : 'None'}</span>
@@ -107,6 +116,14 @@ export default function WatchDetail({
 
         {error ? <div className="inline-error">{error}</div> : null}
       </div>
+
+      <ManualListingForm
+        watches={watches}
+        defaultWatchId={watch.id}
+        onSubmit={onCreateManualListing}
+        busy={manualListingBusy}
+        title="Manual listing"
+      />
 
       {listings.length ? (
         <div className="listing-grid listing-grid-three">
@@ -118,6 +135,9 @@ export default function WatchDetail({
                 key={listing.id}
                 listing={listing}
                 showPin
+                showDelete={listing.source_type === 'manual'}
+                deleting={deletingListingId === listing.id}
+                onDelete={() => onDeleteListing(watch.id, listing)}
                 isPinned={isPinned}
                 isTopRunner={isTopRunner}
                 pinning={pinning}
@@ -130,7 +150,7 @@ export default function WatchDetail({
         <section className="card empty-state">
           <div className="card-kicker">Listings</div>
           <h2>No listings loaded</h2>
-          <p className="muted">Refresh this watch to pull listings.</p>
+          <p className="muted">Refresh this watch or add one manually.</p>
         </section>
       )}
     </section>
